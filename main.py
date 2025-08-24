@@ -2,6 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
@@ -46,11 +47,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
 # ---
 # Dependencies
 # ---
-
-
 def get_current_user_info(authorization: str = Header(...)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -135,6 +135,19 @@ class PetUpdate(BaseModel):
     pedigree_number: str | None = None
     birth_date: str | None = None
     pet_type: PetType | None = None
+
+
+# ---
+# Adicionando o middleware CORS
+# Permite que o frontend em http://localhost:3000 acesse a API
+# ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---
