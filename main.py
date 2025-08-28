@@ -1,14 +1,16 @@
 import os
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header, Depends, status
+from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import RedirectResponse
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
 from typing import List, Literal
 from bson import ObjectId
-
+from starlette.middleware.sessions import SessionMiddleware  # Adicionado
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,8 +20,13 @@ AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
 AUTH0_API_AUDIENCE = os.environ.get("AUTH0_API_AUDIENCE", "")
 CLIENT_ID = os.environ.get("AUTH0_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
+AUTH0_CALLBACK_URI = os.environ.get(
+    "AUTH0_CALLBACK_URI", "http://localhost:8000/callback"
+)
 
-if not all([AUTH0_DOMAIN, AUTH0_API_AUDIENCE, CLIENT_ID, CLIENT_SECRET]):
+if not all(
+    [AUTH0_DOMAIN, AUTH0_API_AUDIENCE, CLIENT_ID, CLIENT_SECRET, AUTH0_CALLBACK_URI]
+):
     raise ValueError("All Auth0 environment variables must be set.")
 
 # MongoDB configuration
@@ -34,7 +41,6 @@ try:
     db = client[DB_NAME]
     profiles_collection = db[COLLECTION_NAME]
     pets_collection = db[PETS_COLLECTION_NAME]
-    # The ismaster command is cheap and does not require auth.
     client.admin.command("ismaster")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
@@ -47,20 +53,41 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Adicionando o middleware CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Adicionando o middleware de sessão para gerenciar o estado do usuário logado
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("SESSION_SECRET_KEY", "your-super-secret-key-here"),
+)
+
+# Configuração do Jinja2
+templates = Jinja2Templates(directory="templates")
+
+# Servindo arquivos estáticos
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # ---
-# Dependencies
+# Dependências
 # ---
-def get_current_user_info(authorization: str = Header(...)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, detail="Invalid or missing Authorization header"
-        )
-
-    access_token = authorization.split(" ")[1]
+def get_current_user_info_from_session(request: Request):
+    """
+    Dependência para obter informações do usuário a partir da sessão.
+    Isso é usado para proteger as rotas de templates HTML.
+    """
+    access_token = request.session.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
 
     headers = {"Authorization": f"Bearer {access_token}"}
-
     try:
         response = requests.get(
             f"https://{AUTH0_DOMAIN}/userinfo",
@@ -69,24 +96,45 @@ def get_current_user_info(authorization: str = Header(...)):
         )
         response.raise_for_status()
         user_info = response.json()
-
-        # The 'sub' field is the unique user ID from Auth0
         user_id = user_info.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in token.")
 
-        # Return both the user ID and the full profile info
         return {"id": user_id, "info": user_info}
     except requests.exceptions.RequestException as e:
         print(f"Auth0 UserInfo request failed: {e}")
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
-# ---
-# Pydantic Model
-# ---
+def get_current_user_info_from_header(authorization: str = Header(...)):
+    """
+    Dependência original para obter informações do usuário a partir do cabeçalho.
+    Isso é usado para proteger os endpoints da API.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing Authorization header"
+        )
+    access_token = authorization.split(" ")[1]
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        response = requests.get(
+            f"https://{AUTH0_DOMAIN}/userinfo",
+            headers=headers,
+            timeout=10,
+        )
+        response.raise_for_status()
+        user_info = response.json()
+        user_id = user_info.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in token.")
+        return {"id": user_id, "info": user_info}
+    except requests.exceptions.RequestException as e:
+        print(f"Auth0 UserInfo request failed: {e}")
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
+# Pydantic Models (Sem alteração)
 class UserAddress(BaseModel):
     street: str | None = None
     city: str | None = None
@@ -95,11 +143,6 @@ class UserAddress(BaseModel):
 
 
 class UserProfile(BaseModel):
-    """
-    Pydantic model to validate incoming user profile data.
-    The 'id' field is an alias for '_id' for database operations.
-    """
-
     id: str | None = Field(alias="_id", default=None)
     name: str
     email: str | None = None
@@ -108,7 +151,6 @@ class UserProfile(BaseModel):
     is_vet: bool | None = Field(default=False)
 
 
-# Pet-related models
 PetType = Literal["cat", "dog"]
 
 
@@ -138,45 +180,73 @@ class PetUpdate(BaseModel):
 
 
 # ---
-# Adicionando o middleware CORS
-# Permite que o frontend em http://localhost:3000 acesse a API
+# Rotas da API
 # ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
-# ---
-# API Routes
-# ---
+@app.get("/")
+def get_landing_page(request: Request):
+    
+    is_authenticated = "access_token" in request.session
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "is_authenticated": is_authenticated,
+            "current_year": 2024,
+        },
+    )
 
 
 @app.get("/login")
 def login():
     """
-    Redirects the user to Auth0 for authentication.
+    Redireciona o usuário para o Auth0 para autenticação.
     """
     return RedirectResponse(
-        url=f"https://{AUTH0_DOMAIN}/authorize?audience={AUTH0_API_AUDIENCE}&response_type=code&client_id={CLIENT_ID}&scope=offline_access openid profile email&redirect_uri=http://localhost:8000/token"
+        url=f"https://{AUTH0_DOMAIN}/authorize?audience={AUTH0_API_AUDIENCE}&response_type=code&client_id={CLIENT_ID}&scope=offline_access openid profile email&redirect_uri={AUTH0_CALLBACK_URI}"
     )
 
 
-@app.get("/token")
-def get_access_token(code: str):
+@app.get("/dashboard", name="dashboard")
+def get_dashboard_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
     """
-    Exchanges the authorization code for an access token.
+    Renderiza a página do dashboard para usuários autenticados,
+    passando os dados do usuário e a lista de pets para o template.
     """
-    payload = (
-        "grant_type=authorization_code",
-        f"&code={code}",
-        f"&client_id={CLIENT_ID}",
-        f"&client_secret={CLIENT_SECRET}",
-        f"&redirect_uri=http://localhost:8000/token",
+    is_authenticated = "access_token" in request.session
+    user_id = user["id"]
+    pets_cursor = pets_collection.find({"users": user_id})
+    pets_list = []
+    for pet in pets_cursor:
+        pet["_id"] = str(pet["_id"])
+        pets_list.append(pet)
+        
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "is_authenticated": is_authenticated,
+            "current_year": 2024,
+            "user_info": user["info"],
+            "pets": pets_list
+        }
     )
+
+
+@app.get("/callback")
+def callback(request: Request, code: str):
+    """
+    Manipula o redirecionamento do Auth0 após a autenticação.
+    Troca o código de autorização por um token e armazena-o na sessão.
+    """
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": AUTH0_CALLBACK_URI,
+    }
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -184,11 +254,18 @@ def get_access_token(code: str):
         response = requests.post(
             f"https://{AUTH0_DOMAIN}/oauth/token",
             headers=headers,
-            data="".join(payload),
+            data=payload,
             timeout=10,
         )
         response.raise_for_status()
-        return response.json()
+        token_info = response.json()
+
+        # Armazena o token de acesso na sessão
+        request.session["access_token"] = token_info.get("access_token")
+
+        # Redireciona o usuário para o dashboard
+        return RedirectResponse(url="/dashboard")
+
     except requests.exceptions.RequestException as e:
         print(f"Auth0 Token exchange failed: {e}")
         raise HTTPException(
@@ -196,160 +273,240 @@ def get_access_token(code: str):
         )
 
 
-@app.get("/profile")
-def get_user_profile(user: dict = Depends(get_current_user_info)):
+# Rota para logout
+@app.get("/logout")
+def logout(request: Request):
     """
-    Returns the authenticated user's profile information from the database.
+    Limpa a sessão e redireciona para a página inicial.
+    """
+    request.session.clear()
+    return RedirectResponse(url="/")
+
+
+@app.get("/profile")
+def get_user_profile(
+    request: Request, user: dict = Depends(get_current_user_info_from_session)
+):
+    """
+    Exibe o perfil do usuário logado em uma página HTML.
+    """
+    user_id = user["id"]
+    profile = profiles_collection.find_one({"_id": user_id})
+
+    # Verifica se existe um perfil completo no banco de dados.
+    if profile:
+        profile_data = profile
+    else:
+        # Se não houver, usa os dados do Auth0 como fallback.
+        profile_data = {
+            "name": user["info"].get("name", "Usuário"),
+            "email": user["info"].get("email"),
+            "bio": "Complete seu perfil para adicionar uma biografia.",
+            "address": None,
+            "is_vet": False,
+        }
+
+    return templates.TemplateResponse(
+        "profile.html",
+        {
+            "request": request,
+            "user_info": profile_data,
+        },
+    )
+
+
+@app.get("/profile/edit")
+def edit_user_profile_page(
+    request: Request, user: dict = Depends(get_current_user_info_from_session)
+):
+    """
+    Renderiza a página com o formulário para editar o perfil do usuário.
     """
     user_id = user["id"]
     profile = profiles_collection.find_one({"_id": user_id})
 
     if profile:
-        # Pydantic handles the '_id' to 'id' alias correctly on return
-        return UserProfile(**profile)
+        profile_data = profile
     else:
-        # If no profile is found, return the basic info from Auth0
-        return {
-            "message": "User profile not found in database.",
-            "auth0_info": user["info"],
+        profile_data = {
+            "name": user["info"].get("name", "Usuário"),
+            "email": user["info"].get("email"),
+            "bio": None,
+            "address": None,
+            "is_vet": False,
         }
+
+    return templates.TemplateResponse(
+        "profile_update.html",
+        {
+            "request": request,
+            "user_info": profile_data,
+        },
+    )
 
 
 @app.post("/profile")
 def create_or_update_user_profile(
-    profile_data: UserProfile, user: dict = Depends(get_current_user_info)
+    user: dict = Depends(get_current_user_info_from_session),
+    name: str = Form(...),
+    bio: str | None = Form(None),
+    street: str | None = Form(None),
+    city: str | None = Form(None),
+    state: str | None = Form(None),
+    zip: str | None = Form(None),
+    is_vet: bool = Form(False),
 ):
     """
-    Creates or updates a user profile in the database.
-    The profile is linked to the authenticated user via their Auth0 ID.
+    Cria ou atualiza um perfil de usuário a partir dos dados do formulário HTML.
+    Esta rota substitui a lógica anterior de criação e atualização.
     """
+    user_id = user["id"]
+    email = user["info"].get("email")
 
-    # Use the 'id' field from the Pydantic model for the database's '_id'
+    profile_data = {
+        "_id": user_id,
+        "name": name,
+        "email": email,
+        "bio": bio,
+        "address": {
+            "street": street,
+            "city": city,
+            "state": state,
+            "zip": zip,
+        },
+        "is_vet": is_vet,
+    }
+
+    # Use 'upsert' para criar ou atualizar o documento
+    profiles_collection.replace_one(
+        {"_id": user_id},
+        profile_data,
+        upsert=True,
+    )
+
+    # Redireciona o usuário de volta para a página de perfil
+    return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/profile")
+def create_or_update_user_profile(
+    profile_data: UserProfile, user: dict = Depends(get_current_user_info_from_header)
+):
     user_id = user["id"]
     profile_data.id = user_id
     profile_data.email = user["info"].get("email", profile_data.email)
-
-    # Use 'upsert' to create or update the document
     result = profiles_collection.replace_one(
         {"email": profile_data.email},
         profile_data.model_dump(by_alias=True, exclude_unset=True),
         upsert=True,
     )
-
     if result.matched_count > 0:
         return {"message": "Profile updated successfully.", "user_id": user_id}
     else:
         return {"message": "Profile created successfully.", "user_id": user_id}
 
 
-# ---
 # Pet Endpoints (CRUD)
-# ---
-
-
-@app.post("/pets", status_code=status.HTTP_201_CREATED)
-def create_pet(pet_data: PetCreate, user: dict = Depends(get_current_user_info)):
+@app.get("/pets/create")
+def add_pet_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
     """
-    Creates a new pet and links it to the authenticated user.
+    Renderiza o formulário para adicionar um novo pet.
     """
-    user_id = user["id"]
-    pet_document = pet_data.model_dump()
-    pet_document["users"] = [user_id]
+    return templates.TemplateResponse("add_pet.html", {"request": request})
 
-    result = pets_collection.insert_one(pet_document)
-
-    if not result.inserted_id:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create pet.",
-        )
-
-    pet_document["_id"] = str(result.inserted_id)
-    return {"message": "Pet created successfully.", "pet": PetInDB(**pet_document)}
-
-
-@app.get("/pets", response_model=List[PetInDB])
-def get_all_user_pets(user: dict = Depends(get_current_user_info)):
-    """
-    Returns all pets for the authenticated user.
-    """
-    user_id = user["id"]
-    pets_cursor = pets_collection.find({"users": user_id})
-
-    # Convert MongoDB documents to Pydantic models
-    pets = []
-    for pet in pets_cursor:
-        pet["_id"] = str(pet["_id"])
-        pets.append(PetInDB(**pet))
-
-    return pets
-
-
-@app.get("/pets/{pet_id}", response_model=PetInDB)
-def get_pet_by_id(pet_id: str, user: dict = Depends(get_current_user_info)):
-    """
-    Returns a specific pet by ID, if the user is linked to it.
-    """
-    user_id = user["id"]
-    pet_document = pets_collection.find_one({"_id": ObjectId(pet_id), "users": user_id})
-
-    if not pet_document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pet not found or you do not have permission to view it.",
-        )
-
-    pet_document["_id"] = str(pet_document["_id"])
-    return PetInDB(**pet_document)
-
-
-@app.patch("/pets/{pet_id}", response_model=PetInDB)
-def update_pet(
-    pet_id: str,
-    pet_data: PetUpdate,
-    user: dict = Depends(get_current_user_info),
+@app.post("/pets")
+def create_or_update_pet_from_form(
+    user: dict = Depends(get_current_user_info_from_session),
+    pet_id: str | None = Form(None), # Novo campo para o ID
+    name: str = Form(...),
+    breed: str = Form(...),
+    pedigree_number: str | None = Form(None),
+    birth_date: str = Form(...),
+    pet_type: PetType = Form(...)
 ):
     """
-    Updates an existing pet's information.
+    Cria ou atualiza um pet a partir do formulário HTML.
     """
     user_id = user["id"]
-
-    # First, check if the user is authorized to modify this pet
-    existing_pet = pets_collection.find_one({"_id": ObjectId(pet_id), "users": user_id})
-    if not existing_pet:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pet not found or you do not have permission to modify it.",
+    
+    pet_data = {
+        "name": name,
+        "breed": breed,
+        "pedigree_number": pedigree_number,
+        "birth_date": birth_date,
+        "pet_type": pet_type,
+        "users": [user_id]
+    }
+    
+    if pet_id:
+        # Lógica de atualização
+        result = pets_collection.update_one(
+            {"_id": ObjectId(pet_id), "users": user_id},
+            {"$set": pet_data}
         )
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pet não encontrado ou você não tem permissão para editar."
+            )
+    else:
+        # Lógica de criação
+        result = pets_collection.insert_one(pet_data)
+        if not result.inserted_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Falha ao criar pet."
+            )
+            
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
-    update_data = pet_data.model_dump(exclude_unset=True)
 
-    if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No fields provided for update.",
-        )
-
-    pets_collection.update_one({"_id": ObjectId(pet_id)}, {"$set": update_data})
-
-    updated_pet = pets_collection.find_one({"_id": ObjectId(pet_id)})
-    updated_pet["_id"] = str(updated_pet["_id"])
-    return PetInDB(**updated_pet)
-
-
-@app.delete("/pets/{pet_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_pet(pet_id: str, user: dict = Depends(get_current_user_info)):
+@app.post("/pets/{pet_id}/delete")
+def delete_pet_from_form(
+    pet_id: str,
+    user: dict = Depends(get_current_user_info_from_session)
+):
     """
-    Deletes a pet from the database.
+    Deleta um pet a partir da submissão do formulário.
     """
     user_id = user["id"]
-
     result = pets_collection.delete_one({"_id": ObjectId(pet_id), "users": user_id})
-
+    
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pet not found or you do not have permission to delete it.",
+            detail="Pet não encontrado ou você não tem permissão para excluí-lo."
         )
+    
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
-    return {"message": "Pet deleted successfully."}
+
+@app.get("/pets/{pet_id}/edit")
+def edit_pet_page(
+    pet_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session)
+):
+    """
+    Renderiza a página com o formulário pré-preenchido para editar um pet.
+    """
+    user_id = user["id"]
+    pet = pets_collection.find_one({"_id": ObjectId(pet_id), "users": user_id})
+    if not pet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet não encontrado ou você não tem permissão para editar."
+        )
+    pet["_id"] = str(pet["_id"])
+    return templates.TemplateResponse(
+        "pet_form.html",
+        {"request": request, "pet": pet}
+    )
+
+
+@app.get("/pets/form")
+def pet_form_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
+    """
+    Renderiza o formulário para adicionar ou editar um pet.
+    """
+    return templates.TemplateResponse("pet_form.html", {"request": request, "pet": None})

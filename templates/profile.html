@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Perfil</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 transform transition-all hover:scale-[1.01] duration-300">
+        <div class="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
+            <div class="w-24 h-24 md:w-32 md:h-32 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-5xl font-bold text-gray-400">
+                {% if user_info.name %}
+                    {{ user_info.name[0] | upper }}
+                {% else %}
+                    ?
+                {% endif %}
+            </div>
+            <div class="flex-1 text-center md:text-left">
+                <h1 class="text-3xl font-extrabold text-gray-900 mb-2">{{ user_info.name | default('Usuário Sem Nome') }}</h1>
+                {% if user_info.email %}
+                    <p class="text-lg text-gray-600 mb-4">{{ user_info.email }}</p>
+                {% endif %}
+                
+                <div class="space-y-4 text-left">
+                    <div class="flex items-center space-x-2 text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                        </svg>
+                        <span>ID do Usuário: <span class="font-mono text-sm break-all text-gray-900">{{ user_info.id }}</span></span>
+                    </div>
+
+                    {% if user_info.bio and user_info.bio != "Complete seu perfil para adicionar uma biografia." %}
+                        <div class="flex items-start space-x-2 text-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0 mt-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7s-8-3.134-8-7 3.582-7 8-7 8 3.134 8 7zM9 9a1 1 0 011-1h1a1 1 0 110 2h-1a1 1 0 01-1-1zm1 3a1 1 0 100 2h1a1 1 0 100-2h-1z" clip-rule="evenodd" />
+                            </svg>
+                            <span><strong class="text-gray-900">Bio:</strong> {{ user_info.bio }}</span>
+                        </div>
+                    {% endif %}
+
+                    {% if user_info.address %}
+                        <div class="flex items-start space-x-2 text-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0 mt-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                            </svg>
+                            <span><strong class="text-gray-900">Endereço:</strong> {{ user_info.address.street }}, {{ user_info.address.city }} - {{ user_info.address.state }}, {{ user_info.address.zip }}</span>
+                        </div>
+                    {% endif %}
+
+                    {% if user_info.is_vet %}
+                        <div class="flex items-start space-x-2 text-green-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 mt-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M6.293 9.293a1 1 0 011.414 0L10 11.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v5a1 1 0 102 0V6z" clip-rule="evenodd" />
+                            </svg>
+                            <span><strong class="text-green-800">Status:</strong> Veterinário Certificado</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+            <a href="/dashboard" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-md font-semibold text-center hover:bg-blue-700 transition-colors duration-300 shadow-md">
+                Voltar para o Dashboard
+            </a>
+            <a href="/profile/edit" class="w-full sm:w-auto px-6 py-3 bg-white text-gray-800 rounded-md font-semibold text-center border border-gray-300 hover:bg-gray-50 transition-colors duration-300 shadow-md">
+                Editar Perfil
+            </a>
+        </div>
+    </div>
+</body>
+</html>

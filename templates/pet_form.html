@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if pet %}Editar Pet{% else %}Adicionar Pet{% endif %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" xintegrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 transform transition-all hover:scale-[1.01] duration-300">
+        <h1 class="text-3xl font-extrabold text-[#5c6e5e] mb-6 text-center">{% if pet %}Editar Pet{% else %}Adicionar Novo Pet{% endif %}</h1>
+        
+        <form id="pet-form" method="post" action="/pets" class="space-y-6">
+            {% if pet %}
+            <!-- Campo oculto para enviar o ID do pet para o backend -->
+            <input type="hidden" name="pet_id" value="{{ pet._id }}">
+            {% endif %}
+
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700">Nome do Pet</label>
+                <input type="text" id="name" name="name" value="{{ pet.name | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
+            </div>
+            
+            <div>
+                <label for="breed" class="block text-sm font-medium text-gray-700">Raça</label>
+                <input type="text" id="breed" name="breed" value="{{ pet.breed | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
+            </div>
+            
+            <div>
+                <label for="pet_type" class="block text-sm font-medium text-gray-700">Tipo de Pet</label>
+                <select id="pet_type" name="pet_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
+                    <option value="dog" {% if pet.pet_type == "dog" %}selected{% endif %}>Cachorro</option>
+                    <option value="cat" {% if pet.pet_type == "cat" %}selected{% endif %}>Gato</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="birth_date" class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+                <input type="date" id="birth_date" name="birth_date" value="{{ pet.birth_date | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
+            </div>
+
+            <div>
+                <label for="pedigree_number" class="block text-sm font-medium text-gray-700">Número do Pedigree (Opcional)</label>
+                <input type="text" id="pedigree_number" name="pedigree_number" value="{{ pet.pedigree_number | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+            </div>
+
+            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="/dashboard" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md font-semibold text-center hover:bg-gray-300 transition-colors duration-300">
+                    Cancelar
+                </a>
+                <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-[#e57373] text-white rounded-md font-semibold hover:bg-[#d56b6b] transition-colors duration-300">
+                    {% if pet %}Salvar Alterações{% else %}Salvar Pet{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

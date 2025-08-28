@@ -1,0 +1,167 @@
+/* Paleta de Cores */
+:root {
+--terracotta: #E07A5F;
+--olive-green: #81B29A;
+--dark-brown: #3D405B;
+--light-beige: #F5F5DC;
+--off-white: #F4F1DE;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.landing-container {
+display: flex;
+flex-direction: column;
+min-height: 100vh;
+
+margin: 0;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+background-color: #F5F5DC; /* Valor de --light-beige */
+color: #3D405B; /* Valor de --dark-brown */
+}
+
+/* Header */
+.header {
+background-color: #F5F5DC; /* Valor de --light-beige */
+padding: 20px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+height: 50px;
+}
+
+.navigation {
+display: flex;
+gap: 20px;
+}
+
+.nav-link {
+color: #3D405B; /* Valor de --dark-brown */
+text-decoration: none;
+font-weight: 500;
+transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+color: #E07A5F; /* Valor de --terracotta */
+}
+
+/* Hero Section */
+.hero-section {
+padding: 80px 20px;
+text-align: center;
+background-color: #F4F1DE; /* Valor de --off-white */
+}
+
+.hero-title {
+color: #3D405B; /* Valor de --dark-brown */
+font-size: 2.5em;
+margin-bottom: 20px;
+}
+
+.hero-subtitle {
+color: #81B29A; /* Valor de --olive-green */
+font-size: 1.2em;
+margin-bottom: 40px;
+}
+
+.cta-buttons {
+display: flex;
+justify-content: center;
+gap: 20px;
+flex-wrap: wrap;
+}
+
+.cta-button {
+border: none;
+padding: 15px 30px;
+border-radius: 5px;
+cursor: pointer;
+font-size: 1em;
+font-weight: bold;
+transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.cta-button.primary {
+background-color: #E07A5F; /* Valor de --terracotta */
+color: white;
+}
+
+.cta-button.primary:hover {
+background-color: #3D405B; /* Valor de --dark-brown */
+}
+
+.cta-button.secondary {
+background-color: transparent;
+border: 2px solid #E07A5F; /* Valor de --terracotta */
+color: #E07A5F; /* Valor de --terracotta */
+}
+
+.cta-button.secondary:hover {
+background-color: #E07A5F; /* Valor de --terracotta */
+color: white;
+}
+
+/* Features Section */
+.features-section {
+background-color: #F5F5DC; /* Valor de --light-beige */
+padding: 60px 20px;
+text-align: center;
+}
+
+.features-title {
+color: #3D405B; /* Valor de --dark-brown */
+font-size: 2em;
+margin-bottom: 40px;
+}
+
+.features-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+gap: 40px;
+max-width: 960px;
+margin: 0 auto;
+text-align: left;
+}
+
+.feature-item {
+padding: 20px;
+border: 1px solid #81B29A; /* Valor de --olive-green */
+border-radius: 8px;
+background-color: white;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.feature-heading {
+color: #E07A5F; /* Valor de --terracotta */
+font-size: 1.5em;
+margin-bottom: 15px;
+}
+
+.feature-item ul {
+list-style: none;
+padding: 0;
+margin: 0;
+}
+
+.feature-item li {
+margin-bottom: 10px;
+color: #3D405B; /* Valor de --dark-brown */
+}
+
+/* Footer */
+.footer {
+background-color: #3D405B; /* Valor de --dark-brown */
+color: #F4F1DE; /* Valor de --off-white */
+text-align: center;
+padding: 20px;
+margin-top: auto;
+}

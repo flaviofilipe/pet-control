@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Patas Digitais: Gerencie a Saúde do seu Pet de Forma Inteligente</title>
+    <meta name="description" content="Patas Digitais é a plataforma ideal para tutores e veterinários gerenciarem vacinas, agendarem consultas e acompanharem a saúde dos pets. Cuide do seu melhor amigo com a tecnologia!" />
+    <meta name="keywords" content="saúde pet, vacinas, agendamento veterinário, histórico pet, bem-estar animal, patas digitais" />
+    <meta name="author" content="Patas Digitais" />
+    <link rel="canonical" href="URL_DA_SUA_LANDING_PAGE" />
+    <!-- Link para o arquivo CSS estático -->
+    <link rel="stylesheet" href="{{ url_for('static', path='landing-page.css') }}">
+</head>
+<body>
+    <div class="landing-container">
+        <header class="header">
+            <img src="{{ url_for('static', path='assets/pet-logo.png') }}" alt="Patas Digitais Logo" class="logo" />
+            <nav class="navigation">
+                <a href="#features" class="nav-link">Funcionalidades</a>
+                <a href="#pricing" class="nav-link">Preços</a>
+                <a href="#contact" class="nav-link">Contato</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="hero-section">
+                <h1 class="hero-title">A Saúde do Seu Pet, na Palma da Sua Pata.</h1>
+                <p class="hero-subtitle">Gerencie vacinas, agende consultas e conecte-se com seu veterinário de forma fácil e intuitiva.</p>
+                <div class="cta-buttons">
+                    <!-- Lógica de autenticação com Jinja2 -->
+                    {% if not is_authenticated %}
+                        <a href="{{ url_for('login') }}" class="cta-button primary">Cadastre-se Grátis</a>
+                        <a href="{{ url_for('login') }}" class="cta-button secondary">Login</a>
+                    {% else %}
+                        <a href="{{ url_for('dashboard') }}" class='cta-button primary'>Acessar Conta</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section id="features" class="features-section">
+                <h2 class="features-title">Facilitando o Cuidado com Seus Melhores Amigos</h2>
+                <div class="features-grid">
+                    <div class="feature-item">
+                        <h3 class="feature-heading">Para Tutores:</h3>
+                        <ul>
+                            <li>Registre e acompanhe as vacinas do seu pet.</li>
+                            <li>Receba lembretes de próximas doses e medicamentos.</li>
+                            <li>Tenha o histórico de saúde completo sempre à mão.</li>
+                            <li>Conecte-se facilmente com seu veterinário.</li>
+                        </ul>
+                    </div>
+                    <div class="feature-item">
+                        <h3 class="feature-heading">Para Veterinários:</h3>
+                        <ul>
+                            <li>Acesse o histórico completo dos seus pacientes.</li>
+                            <li>Registre medicações e acompanhamentos.</li>
+                            <li>Simplifique a comunicação com os tutores.</li>
+                            <li>Mantenha os dados dos seus pacientes organizados.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            &copy; {{ current_year }} Patas Digitais. Todos os direitos reservados.
+        </footer>
+    </div>
+</body>
+</html>

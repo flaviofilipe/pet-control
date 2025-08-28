@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" xintegrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <header class="bg-[#5c6e5e] text-white shadow-md p-4 sticky top-0 z-50">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-xl font-bold text-gray-400 overflow-hidden">
+                    <img src="https://placehold.co/48x48/f4f2ea/4b4b4b?text={{ user_info.name[0] | upper if user_info.name else '?' }}" alt="Foto de Perfil" class="w-full h-full object-cover">
+                </div>
+                <h1 class="text-xl font-semibold">Bem-vindo, {{ user_info.name | default('Usuário') }}!</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="/profile" class="text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-user-circle mr-2"></i> Perfil
+                </a>
+                <a href="/logout" class="bg-[#8b4513] hover:bg-[#a0522d] text-white px-4 py-2 rounded-md font-medium transition-colors duration-200">
+                    Sair
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 flex-grow">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-[#5c6e5e]">Seus Pets</h2>
+            <p class="text-gray-600">Gerencie a saúde e o bem-estar dos seus companheiros aqui.</p>
+        </div>
+
+        <!-- Seção de Pets -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% if not pets %}
+                <div class="col-span-full text-center py-12">
+                    <i class="fas fa-paw text-6xl text-gray-400 mb-4"></i>
+                    <p class="text-gray-600 text-lg">Nenhum pet cadastrado. Adicione o seu primeiro!</p>
+                </div>
+            {% else %}
+                {% for pet in pets %}
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                        <h3 class="text-xl font-bold text-[#5c6e5e] mb-2">{{ pet.name }}</h3>
+                        <p class="text-gray-600 text-sm mb-4">{{ pet.breed }}</p>
+                        <div class="space-y-2">
+                            <div class="flex items-center text-gray-700">
+                                <i class="fas fa-id-card-alt mr-2 text-terracotta"></i>
+                                <span>Pedigree: {{ pet.pedigree_number or 'Não informado' }}</span>
+                            </div>
+                            <div class="flex items-center text-gray-700">
+                                <i class="fas fa-birthday-cake mr-2 text-terracotta"></i>
+                                <span>Nascimento: {{ pet.birth_date }}</span>
+                            </div>
+                            <div class="flex items-center text-gray-700">
+                                <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }} mr-2 text-terracotta"></i>
+                                <span>Tipo: {{ pet.pet_type }}</span>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex space-x-2">
+                            <a href="/pets/{{ pet._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
+                                <i class="fas fa-pencil-alt"></i> Editar
+                            </a>
+                            <form action="/pets/{{ pet._id }}/delete" method="post" class="inline">
+                                <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este pet?');">
+                                    <i class="fas fa-trash-alt"></i> Excluir
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        
+        <div class="text-center mt-8">
+            <a href="/pets/form" class="bg-[#e57373] hover:bg-[#d56b6b] text-white font-bold py-3 px-6 rounded-md shadow-lg transition-transform transform hover:scale-105 duration-300">
+                <i class="fas fa-plus-circle mr-2"></i> Adicionar Novo Pet
+            </a>
+        </div>
+    </main>
+
+    <footer class="bg-gray-200 text-center text-gray-600 p-4 mt-8">
+        &copy; {{ current_year }} Patas Digitais. Todos os direitos reservados.
+    </footer>
+</body>
+</html>
