@@ -17,6 +17,25 @@
         }
         .bg-terracotta { background-color: #e57373; }
         .text-terracotta { color: #e57373; }
+        .breed-options-list {
+            max-height: 240px; /* Limita a altura para exibir cerca de 10 itens */
+            overflow-y: auto;
+        }
+        .breed-options-list li {
+            padding: 10px;
+            cursor: pointer;
+        }
+        .breed-options-list li:hover {
+            background-color: #f3f4f6;
+        }
+        .input-error {
+            border-color: #ef4444;
+        }
+        .error-message {
+            color: #ef4444;
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen">
@@ -28,27 +47,55 @@
             <!-- Campo oculto para enviar o ID do pet para o backend -->
             <input type="hidden" name="pet_id" value="{{ pet._id }}">
             {% endif %}
+            
+            <div id="error-container" class="space-y-2 hidden">
+                <!-- As mensagens de erro serão exibidas aqui -->
+            </div>
+
+            <div class="flex items-center space-x-4 mb-4">
+                <span class="text-sm font-medium text-gray-700">Gênero: <span class="text-red-500">*</span></span>
+                <label class="inline-flex items-center">
+                    <input type="radio" name="gender" value="male" class="form-radio text-[#e57373] h-4 w-4" {% if pet and pet.gender == 'male' %}checked{% endif %} required>
+                    <span class="ml-2 text-gray-700">Macho</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="radio" name="gender" value="female" class="form-radio text-[#e57373] h-4 w-4" {% if pet and pet.gender == 'female' %}checked{% endif %} required>
+                    <span class="ml-2 text-gray-700">Fêmea</span>
+                </label>
+            </div>
 
             <div>
-                <label for="name" class="block text-sm font-medium text-gray-700">Nome do Pet</label>
-                <input type="text" id="name" name="name" value="{{ pet.name | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
+                <label for="name" class="block text-sm font-medium text-gray-700">Nome do Pet <span class="text-red-500">*</span></label>
+                <div class="flex space-x-2">
+                    <input type="text" id="name" name="name" value="{{ pet.name | default('') }}" class="flex-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required list="name-suggestions">
+                    <button type="button" id="generate-name-btn" class="bg-[#e57373] text-white px-4 py-2 rounded-md font-semibold hover:bg-[#d56b6b] transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        Gerar
+                    </button>
+                </div>
+                <datalist id="name-suggestions"></datalist>
             </div>
             
             <div>
-                <label for="breed" class="block text-sm font-medium text-gray-700">Raça</label>
-                <input type="text" id="breed" name="breed" value="{{ pet.breed | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
-            </div>
-            
-            <div>
-                <label for="pet_type" class="block text-sm font-medium text-gray-700">Tipo de Pet</label>
+                <label for="pet_type" class="block text-sm font-medium text-gray-700">Tipo de Pet <span class="text-red-500">*</span></label>
                 <select id="pet_type" name="pet_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
-                    <option value="dog" {% if pet.pet_type == "dog" %}selected{% endif %}>Cachorro</option>
-                    <option value="cat" {% if pet.pet_type == "cat" %}selected{% endif %}>Gato</option>
+                    <option value="" disabled selected>Selecione...</option>
+                    <option value="dog" {% if pet and pet.pet_type == "dog" %}selected{% endif %}>Cachorro</option>
+                    <option value="cat" {% if pet and pet.pet_type == "cat" %}selected{% endif %}>Gato</option>
                 </select>
             </div>
+
+            <div class="relative">
+                <label for="breed" class="block text-sm font-medium text-gray-700">Raça <span class="text-red-500">*</span></label>
+                <input type="text" id="breed" name="breed" value="{{ pet.breed | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required placeholder="Selecione o tipo de pet primeiro">
+                <div id="breed-options-container" class="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg hidden">
+                    <ul id="breeds-list" class="breed-options-list">
+                        <!-- Opções de raça serão preenchidas aqui -->
+                    </ul>
+                </div>
+            </div>
             
             <div>
-                <label for="birth_date" class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+                <label for="birth_date" class="block text-sm font-medium text-gray-700">Data de Nascimento <span class="text-red-500">*</span></label>
                 <input type="date" id="birth_date" name="birth_date" value="{{ pet.birth_date | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" required>
             </div>
 
@@ -67,5 +114,234 @@
             </div>
         </form>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('pet-form');
+            const errorContainer = document.getElementById('error-container');
+            const petTypeSelect = document.getElementById('pet_type');
+            const breedInput = document.getElementById('breed');
+            const breedsList = document.getElementById('breeds-list');
+            const breedOptionsContainer = document.getElementById('breed-options-container');
+            const genderRadios = document.querySelectorAll('input[name="gender"]');
+            const generateNameBtn = document.getElementById('generate-name-btn');
+            const nameInput = document.getElementById('name');
+            const nameSuggestionsList = document.getElementById('name-suggestions');
+            const birthDateInput = document.getElementById('birth_date');
+
+            let dogBreeds = [];
+            let catBreeds = [];
+            let currentBreeds = [];
+            let generatedNames = [];
+            let timeoutId;
+
+            const getDogBreeds = async () => {
+                const url = "https://dog.ceo/api/breeds/list/all";
+                try {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const allBreeds = ['Sem Raça Definida (SRD)'];
+                        for (const breed in data.message) {
+                            if (data.message[breed].length > 0) {
+                                for (const subBreed of data.message[breed]) {
+                                    allBreeds.push(`${subBreed} ${breed}`.replace(/\b\w/g, c => c.toUpperCase()));
+                                }
+                            } else {
+                                allBreeds.push(breed.replace(/\b\w/g, c => c.toUpperCase()));
+                            }
+                        }
+                        dogBreeds = allBreeds.sort();
+                    }
+                } catch (error) {
+                    console.error("Erro ao buscar raças de cachorro:", error);
+                }
+            };
+
+            const getCatBreeds = async () => {
+                const url = "https://api.thecatapi.com/v1/breeds";
+                try {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    catBreeds = data.map(breed => breed.name);
+                    catBreeds.unshift("Sem Raça Definida (SRD)");
+                    catBreeds = catBreeds.sort();
+                } catch (error) {
+                    console.error("Erro ao buscar raças de gato:", error);
+                }
+            };
+            
+            getDogBreeds();
+            getCatBreeds();
+
+            const renderBreeds = (filteredBreeds) => {
+                breedsList.innerHTML = '';
+                if (filteredBreeds.length === 0) {
+                    const li = document.createElement('li');
+                    li.className = 'px-4 py-2 text-gray-500';
+                    li.textContent = 'Nenhuma raça encontrada';
+                    breedsList.appendChild(li);
+                } else {
+                    filteredBreeds.forEach(breed => {
+                        const li = document.createElement('li');
+                        li.className = 'px-4 py-2 cursor-pointer hover:bg-gray-100';
+                        li.textContent = breed;
+                        li.addEventListener('click', () => {
+                            breedInput.value = breed;
+                            breedOptionsContainer.classList.add('hidden');
+                        });
+                        breedsList.appendChild(li);
+                    });
+                }
+            };
+
+            const updateBreedsList = () => {
+                const petType = petTypeSelect.value;
+                breedsList.innerHTML = '';
+                
+                if (petType === 'dog') {
+                    currentBreeds = dogBreeds;
+                } else if (petType === 'cat') {
+                    currentBreeds = catBreeds;
+                } else {
+                    currentBreeds = [];
+                }
+
+                if (currentBreeds.length > 0) {
+                    breedInput.placeholder = "Digite para pesquisar ou selecione uma raça";
+                } else {
+                    breedInput.placeholder = "Nenhuma raça encontrada";
+                }
+                
+                renderBreeds(currentBreeds);
+            };
+
+            const toggleGenerateButton = () => {
+                const genderSelected = document.querySelector('input[name="gender"]:checked');
+                generateNameBtn.disabled = !genderSelected;
+            };
+
+            const generateNames = async () => {
+                const genderSelected = document.querySelector('input[name="gender"]:checked');
+                if (!genderSelected) return;
+
+                const gender = genderSelected.value;
+                try {
+                    const response = await fetch(`/generate-pet-name?gender=${gender}`);
+                    const data = await response.json();
+                    generatedNames = data.names;
+                    
+                    nameSuggestionsList.innerHTML = '';
+                    if (generatedNames && generatedNames.length > 0) {
+                        generatedNames.forEach(name => {
+                            const option = document.createElement('option');
+                            option.value = name;
+                            nameSuggestionsList.appendChild(option);
+                        });
+                        nameInput.value = generatedNames[0];
+                        nameInput.focus();
+                    }
+                } catch (error) {
+                    console.error("Erro ao gerar nomes de pet:", error);
+                }
+            };
+            
+            const showErrorMessage = (message) => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative';
+                messageDiv.innerHTML = `<strong class="font-bold">Erro!</strong><span class="block sm:inline ml-2">${message}</span>`;
+                errorContainer.appendChild(messageDiv);
+                errorContainer.classList.remove('hidden');
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    errorContainer.classList.add('hidden');
+                    errorContainer.innerHTML = '';
+                }, 5000);
+            };
+
+            const validateForm = (event) => {
+                errorContainer.innerHTML = '';
+                let isValid = true;
+                
+                const gender = document.querySelector('input[name="gender"]:checked');
+                if (!gender) {
+                    showErrorMessage("Por favor, selecione o gênero do pet.");
+                    isValid = false;
+                }
+
+                if (!nameInput.value) {
+                    showErrorMessage("O nome do pet é obrigatório.");
+                    isValid = false;
+                }
+                
+                if (!petTypeSelect.value) {
+                    showErrorMessage("O tipo de pet é obrigatório.");
+                    isValid = false;
+                }
+
+                if (!breedInput.value) {
+                    showErrorMessage("A raça do pet é obrigatória.");
+                    isValid = false;
+                }
+                
+                const birthDateValue = birthDateInput.value;
+                const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                if (!birthDateValue || !dateRegex.test(birthDateValue)) {
+                    showErrorMessage("A data de nascimento é obrigatória e deve estar no formato DD/MM/AAAA.");
+                    isValid = false;
+                } else {
+                    const today = new Date();
+                    const birthDate = new Date(birthDateValue);
+                    if (birthDate > today) {
+                        showErrorMessage("A data de nascimento não pode ser no futuro.");
+                        isValid = false;
+                    }
+                }
+
+                if (!isValid) {
+                    event.preventDefault();
+                }
+            };
+
+            form.addEventListener('submit', validateForm);
+            
+            petTypeSelect.addEventListener('change', () => {
+                breedInput.value = '';
+                updateBreedsList();
+            });
+            
+            breedInput.addEventListener('focus', () => {
+                if (currentBreeds.length > 0) {
+                    renderBreeds(currentBreeds);
+                    breedOptionsContainer.classList.remove('hidden');
+                }
+            });
+            
+            breedInput.addEventListener('input', () => {
+                const searchValue = breedInput.value.toLowerCase();
+                const filteredBreeds = currentBreeds.filter(breed => 
+                    breed.toLowerCase().includes(searchValue)
+                );
+                renderBreeds(filteredBreeds);
+                breedOptionsContainer.classList.remove('hidden');
+            });
+            
+            document.addEventListener('click', (event) => {
+                if (!breedOptionsContainer.contains(event.target) && event.target !== breedInput) {
+                    breedOptionsContainer.classList.add('hidden');
+                }
+            });
+
+            generateNameBtn.addEventListener('click', generateNames);
+            genderRadios.forEach(radio => radio.addEventListener('change', toggleGenerateButton));
+
+            // Chamada inicial para popular a lista de raças se o tipo de pet já estiver selecionado
+            const initialPetType = petTypeSelect.value;
+            if (initialPetType) {
+                updateBreedsList();
+            }
+
+            toggleGenerateButton();
+        });
+    </script>
 </body>
 </html>

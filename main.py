@@ -1,16 +1,30 @@
 import os
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, Form
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Header,
+    Depends,
+    status,
+    Request,
+    Response,
+    Form,
+    Query,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import RedirectResponse
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Optional
 from bson import ObjectId
-from starlette.middleware.sessions import SessionMiddleware  # Adicionado
+from starlette.middleware.sessions import SessionMiddleware
+from datetime import datetime
+import random
+from faker import Faker
+from faker_food import FoodProvider
 
 # Load environment variables from .env file
 load_dotenv()
@@ -74,16 +88,75 @@ templates = Jinja2Templates(directory="templates")
 # Servindo arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Inicializa Faker e adiciona provedor de alimentos
+fake = Faker("pt_BR")
+fake.add_provider(FoodProvider)
+
+
+# Funções para buscar raças
+def get_dog_breeds_list():
+    url = "https://dog.ceo/api/breeds/list/all"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        breeds_data = response.json()
+        all_breeds = []
+        for breed, sub_breeds in breeds_data["message"].items():
+            if sub_breeds:
+                for sub_breed in sub_breeds:
+                    all_breeds.append(f"{sub_breed} {breed}".title())
+            else:
+                all_breeds.append(breed.title())
+        return all_breeds
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao buscar raças de cachorro: {e}")
+        return []
+
+
+def get_cat_breeds_list():
+    url = "https://api.thecatapi.com/v1/breeds"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        breeds_data = response.json()
+        cat_breeds = [breed["name"] for breed in breeds_data]
+        return cat_breeds
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao buscar raças de gato: {e}")
+        return []
+
 
 # ---
 # Dependências
 # ---
+def refresh_auth_token(refresh_token: str) -> dict:
+    """Renova o token de acesso usando o refresh token."""
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "refresh_token": refresh_token,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    response = requests.post(
+        f"https://{AUTH0_DOMAIN}/oauth/token",
+        headers=headers,
+        data=payload,
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def get_current_user_info_from_session(request: Request):
     """
     Dependência para obter informações do usuário a partir da sessão.
-    Isso é usado para proteger as rotas de templates HTML.
+    Renova o token automaticamente se necessário.
     """
     access_token = request.session.get("access_token")
+    refresh_token = request.session.get("refresh_token")
+
     if not access_token:
         raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
 
@@ -101,6 +174,43 @@ def get_current_user_info_from_session(request: Request):
             raise HTTPException(status_code=401, detail="User ID not found in token.")
 
         return {"id": user_id, "info": user_info}
+    except requests.exceptions.HTTPError as http_err:
+        if http_err.response.status_code == 401 and refresh_token:
+            print("Access token expired, attempting to refresh...")
+            try:
+                new_tokens = refresh_auth_token(refresh_token)
+                new_access_token = new_tokens.get("access_token")
+                new_refresh_token = new_tokens.get("refresh_token", refresh_token)
+
+                request.session["access_token"] = new_access_token
+                request.session["refresh_token"] = new_refresh_token
+
+                print("Token refreshed successfully. Retrying request.")
+
+                # Tenta novamente com o novo token
+                headers["Authorization"] = f"Bearer {new_access_token}"
+                response = requests.get(
+                    f"https://{AUTH0_DOMAIN}/userinfo",
+                    headers=headers,
+                    timeout=10,
+                )
+                response.raise_for_status()
+                user_info = response.json()
+                user_id = user_info.get("sub")
+
+                return {"id": user_id, "info": user_info}
+            except requests.exceptions.RequestException as refresh_err:
+                print(f"Token refresh failed: {refresh_err}. Forcing re-login.")
+                request.session.clear()
+                raise HTTPException(
+                    status_code=401,
+                    detail="Could not refresh credentials. Please log in again.",
+                )
+        else:
+            print(f"Auth0 UserInfo request failed with HTTP error: {http_err}")
+            raise HTTPException(
+                status_code=401, detail="Could not validate credentials"
+            )
     except requests.exceptions.RequestException as e:
         print(f"Auth0 UserInfo request failed: {e}")
         raise HTTPException(status_code=401, detail="Could not validate credentials")
@@ -154,12 +264,30 @@ class UserProfile(BaseModel):
 PetType = Literal["cat", "dog"]
 
 
+# Novo modelo para Tratamentos
+class Treatment(BaseModel):
+    id: str = Field(alias="_id")
+    category: Literal["Vacinas", "Ectoparasitas", "Vermífugo", "Tratamentos"]
+    name: str
+    description: str | None = None
+    date: str
+    time: str | None = None
+    applier_type: Literal["Veterinarian", "Tutor"]
+    applier_name: Optional[str] = None
+    applier_id: Optional[str] = None
+    done: bool = Field(default=False)
+
+
 class PetBase(BaseModel):
     name: str
     breed: str
     pedigree_number: str | None = None
     birth_date: str
     pet_type: PetType
+    treatments: List[Treatment] = []
+    deleted_at: Optional[datetime] = None
+    nickname: Optional[str] = None  # Novo campo para o nickname
+    gender: Optional[Literal["male", "female"]] = None  # Novo campo para o gênero
 
 
 class PetInDB(PetBase):
@@ -177,6 +305,7 @@ class PetUpdate(BaseModel):
     pedigree_number: str | None = None
     birth_date: str | None = None
     pet_type: PetType | None = None
+    treatments: List[Treatment] | None = None
 
 
 # ---
@@ -186,7 +315,6 @@ class PetUpdate(BaseModel):
 
 @app.get("/")
 def get_landing_page(request: Request):
-    
     is_authenticated = "access_token" in request.session
     return templates.TemplateResponse(
         "index.html",
@@ -209,19 +337,25 @@ def login():
 
 
 @app.get("/dashboard", name="dashboard")
-def get_dashboard_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
+def get_dashboard_page(
+    request: Request, user: dict = Depends(get_current_user_info_from_session)
+):
     """
     Renderiza a página do dashboard para usuários autenticados,
     passando os dados do usuário e a lista de pets para o template.
     """
     is_authenticated = "access_token" in request.session
     user_id = user["id"]
-    pets_cursor = pets_collection.find({"users": user_id})
+    # Filtra apenas pets que não foram deletados
+    pets_cursor = pets_collection.find({"users": user_id, "deleted_at": None})
     pets_list = []
     for pet in pets_cursor:
         pet["_id"] = str(pet["_id"])
+        if "treatments" in pet:
+            for treatment in pet["treatments"]:
+                treatment["_id"] = str(treatment["_id"])
         pets_list.append(pet)
-        
+
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -229,8 +363,8 @@ def get_dashboard_page(request: Request, user: dict = Depends(get_current_user_i
             "is_authenticated": is_authenticated,
             "current_year": 2024,
             "user_info": user["info"],
-            "pets": pets_list
-        }
+            "pets": pets_list,
+        },
     )
 
 
@@ -238,7 +372,7 @@ def get_dashboard_page(request: Request, user: dict = Depends(get_current_user_i
 def callback(request: Request, code: str):
     """
     Manipula o redirecionamento do Auth0 após a autenticação.
-    Troca o código de autorização por um token e armazena-o na sessão.
+    Armazena o token de acesso e o refresh token na sessão.
     """
     payload = {
         "grant_type": "authorization_code",
@@ -260,8 +394,9 @@ def callback(request: Request, code: str):
         response.raise_for_status()
         token_info = response.json()
 
-        # Armazena o token de acesso na sessão
+        # Armazena ambos os tokens na sessão
         request.session["access_token"] = token_info.get("access_token")
+        request.session["refresh_token"] = token_info.get("refresh_token")
 
         # Redireciona o usuário para o dashboard
         return RedirectResponse(url="/dashboard")
@@ -388,125 +523,381 @@ def create_or_update_user_profile(
     return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@app.post("/profile")
-def create_or_update_user_profile(
-    profile_data: UserProfile, user: dict = Depends(get_current_user_info_from_header)
+# Pet Endpoints
+@app.get("/pets/form")
+def pet_form_page(
+    request: Request, user: dict = Depends(get_current_user_info_from_session)
 ):
-    user_id = user["id"]
-    profile_data.id = user_id
-    profile_data.email = user["info"].get("email", profile_data.email)
-    result = profiles_collection.replace_one(
-        {"email": profile_data.email},
-        profile_data.model_dump(by_alias=True, exclude_unset=True),
-        upsert=True,
-    )
-    if result.matched_count > 0:
-        return {"message": "Profile updated successfully.", "user_id": user_id}
-    else:
-        return {"message": "Profile created successfully.", "user_id": user_id}
-
-
-# Pet Endpoints (CRUD)
-@app.get("/pets/create")
-def add_pet_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
     """
     Renderiza o formulário para adicionar um novo pet.
     """
-    return templates.TemplateResponse("add_pet.html", {"request": request})
+    dog_breeds = get_dog_breeds_list()
+    cat_breeds = get_cat_breeds_list()
 
-@app.post("/pets")
-def create_or_update_pet_from_form(
-    user: dict = Depends(get_current_user_info_from_session),
-    pet_id: str | None = Form(None), # Novo campo para o ID
-    name: str = Form(...),
-    breed: str = Form(...),
-    pedigree_number: str | None = Form(None),
-    birth_date: str = Form(...),
-    pet_type: PetType = Form(...)
-):
-    """
-    Cria ou atualiza um pet a partir do formulário HTML.
-    """
-    user_id = user["id"]
-    
-    pet_data = {
-        "name": name,
-        "breed": breed,
-        "pedigree_number": pedigree_number,
-        "birth_date": birth_date,
-        "pet_type": pet_type,
-        "users": [user_id]
-    }
-    
-    if pet_id:
-        # Lógica de atualização
-        result = pets_collection.update_one(
-            {"_id": ObjectId(pet_id), "users": user_id},
-            {"$set": pet_data}
-        )
-        if result.matched_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet não encontrado ou você não tem permissão para editar."
-            )
-    else:
-        # Lógica de criação
-        result = pets_collection.insert_one(pet_data)
-        if not result.inserted_id:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Falha ao criar pet."
-            )
-            
-    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@app.post("/pets/{pet_id}/delete")
-def delete_pet_from_form(
-    pet_id: str,
-    user: dict = Depends(get_current_user_info_from_session)
-):
-    """
-    Deleta um pet a partir da submissão do formulário.
-    """
-    user_id = user["id"]
-    result = pets_collection.delete_one({"_id": ObjectId(pet_id), "users": user_id})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pet não encontrado ou você não tem permissão para excluí-lo."
-        )
-    
-    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        "pet_form.html",
+        {
+            "request": request,
+            "pet": None,
+            "dog_breeds": dog_breeds,
+            "cat_breeds": cat_breeds,
+        },
+    )
 
 
 @app.get("/pets/{pet_id}/edit")
 def edit_pet_page(
     pet_id: str,
     request: Request,
-    user: dict = Depends(get_current_user_info_from_session)
+    user: dict = Depends(get_current_user_info_from_session),
 ):
     """
     Renderiza a página com o formulário pré-preenchido para editar um pet.
     """
     user_id = user["id"]
-    pet = pets_collection.find_one({"_id": ObjectId(pet_id), "users": user_id})
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
     if not pet:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pet não encontrado ou você não tem permissão para editar."
+            detail="Pet não encontrado ou você não tem permissão para editar.",
         )
     pet["_id"] = str(pet["_id"])
+
+    dog_breeds = get_dog_breeds_list()
+    cat_breeds = get_cat_breeds_list()
+
     return templates.TemplateResponse(
         "pet_form.html",
-        {"request": request, "pet": pet}
+        {
+            "request": request,
+            "pet": pet,
+            "dog_breeds": dog_breeds,
+            "cat_breeds": cat_breeds,
+        },
     )
 
 
-@app.get("/pets/form")
-def pet_form_page(request: Request, user: dict = Depends(get_current_user_info_from_session)):
+@app.get("/pets/{pet_id}/profile")
+def pet_profile_page(
+    pet_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    search: Optional[str] = None,
+):
     """
-    Renderiza o formulário para adicionar ou editar um pet.
+    Renderiza a página de perfil do pet, com detalhes e tratamentos.
     """
-    return templates.TemplateResponse("pet_form.html", {"request": request, "pet": None})
+    user_id = user["id"]
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
+
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet não encontrado.")
+
+    pet["_id"] = str(pet["_id"])
+
+    # Processa os tratamentos e aplica o filtro
+    treatments = pet.get("treatments", [])
+
+    # Separa tratamentos expirados, agendados e concluídos
+    today = datetime.now().date()
+    scheduled_treatments = []
+    expired_treatments = []
+    done_treatments = []
+
+    for t in treatments:
+        treatment_date = datetime.strptime(t.get("date"), "%Y-%m-%d").date()
+        t["_id"] = str(t["_id"])  # Garante que o ID é string
+
+        if t.get("done"):
+            done_treatments.append(t)
+        elif treatment_date > today:
+            scheduled_treatments.append(t)
+        else:
+            expired_treatments.append(t)
+
+    # Aplica o filtro de pesquisa, se houver
+    if search:
+        search_lower = search.lower()
+        scheduled_treatments = [
+            t
+            for t in scheduled_treatments
+            if search_lower in t.get("name", "").lower()
+            or search_lower in t.get("category", "").lower()
+            or search_lower in t.get("date", "").lower()
+        ]
+        expired_treatments = [
+            t
+            for t in expired_treatments
+            if search_lower in t.get("name", "").lower()
+            or search_lower in t.get("category", "").lower()
+            or search_lower in t.get("date", "").lower()
+        ]
+        done_treatments = [
+            t
+            for t in done_treatments
+            if search_lower in t.get("name", "").lower()
+            or search_lower in t.get("category", "").lower()
+            or search_lower in t.get("date", "").lower()
+        ]
+
+    # Ordena os tratamentos por data
+    scheduled_treatments.sort(
+        key=lambda x: datetime.strptime(x.get("date"), "%Y-%m-%d")
+    )
+    expired_treatments.sort(key=lambda x: datetime.strptime(x.get("date"), "%Y-%m-%d"))
+    done_treatments.sort(
+        key=lambda x: datetime.strptime(x.get("date"), "%Y-%m-%d"), reverse=True
+    )
+
+    return templates.TemplateResponse(
+        "pet_profile.html",
+        {
+            "request": request,
+            "pet": pet,
+            "scheduled_treatments": scheduled_treatments,
+            "expired_treatments": expired_treatments,
+            "done_treatments": done_treatments,
+        },
+    )
+
+
+@app.post("/pets")
+def create_or_update_pet_from_form(
+    user: dict = Depends(get_current_user_info_from_session),
+    pet_id: str | None = Form(None),
+    name: str = Form(...),
+    breed: str = Form(...),
+    pedigree_number: str | None = Form(None),
+    birth_date: str = Form(...),
+    pet_type: PetType = Form(...),
+    gender: Optional[Literal["male", "female"]] = Form(None),
+):
+    """
+    Cria ou atualiza um pet a partir do formulário HTML.
+    """
+    user_id = user["id"]
+
+    pet_data = {
+        "name": name,
+        "breed": breed,
+        "pedigree_number": pedigree_number,
+        "birth_date": birth_date,
+        "pet_type": pet_type,
+        "users": [user_id],
+        "gender": gender,
+    }
+
+    if pet_id:
+        # Lógica de atualização
+        result = pets_collection.update_one(
+            {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
+            {"$set": pet_data},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pet não encontrado ou você não tem permissão para editar.",
+            )
+    else:
+        random_code = "".join(random.choices("0123456789", k=4))
+        nickname = f"{name.split()[0].lower()}_{random_code}"
+
+        # Lógica de criação
+        pet_data["treatments"] = []
+        pet_data["deleted_at"] = None
+        pet_data["nickname"] = nickname
+        result = pets_collection.insert_one(pet_data)
+        if not result.inserted_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Falha ao criar pet.",
+            )
+
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/pets/{pet_id}/delete")
+def delete_pet_from_form(
+    pet_id: str, user: dict = Depends(get_current_user_info_from_session)
+):
+    """
+    Realiza o soft delete de um pet.
+    """
+    user_id = user["id"]
+    result = pets_collection.update_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
+        {"$set": {"deleted_at": datetime.now()}},
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet não encontrado ou você não tem permissão para excluí-lo.",
+        )
+
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- ROTAS PARA TRATAMENTOS ---
+
+
+@app.get("/pets/{pet_id}/treatments/add")
+def add_treatment_page(
+    pet_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user["id"], "deleted_at": None}
+    )
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet not found.")
+
+    return templates.TemplateResponse(
+        "treatment_form.html", {"request": request, "pet": pet, "treatment": None}
+    )
+
+
+@app.post("/pets/{pet_id}/treatments")
+def create_or_update_treatment(
+    pet_id: str,
+    user: dict = Depends(get_current_user_info_from_session),
+    treatment_id: Optional[str] = Form(None),
+    category: str = Form(...),
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    date: str = Form(...),
+    time: Optional[str] = Form(None),
+    applier_type: str = Form(...),
+    applier_name: Optional[str] = Form(None),
+    applier_id: Optional[str] = Form(None),
+    done: bool = Form(False),
+):
+    user_id = user["id"]
+
+    # Validações e criação do subdocumento
+    treatment_data = {
+        "_id": ObjectId(treatment_id) if treatment_id else ObjectId(),
+        "category": category,
+        "name": name,
+        "description": description,
+        "date": date,
+        "time": time,
+        "applier_type": applier_type,
+        "applier_name": applier_name,
+        "applier_id": applier_id,
+        "done": done,
+    }
+
+    if treatment_id:
+        # Lógica de atualização
+        result = pets_collection.update_one(
+            {
+                "_id": ObjectId(pet_id),
+                "users": user_id,
+                "deleted_at": None,
+                "treatments._id": ObjectId(treatment_id),
+            },
+            {"$set": {"treatments.$": treatment_data}},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=404, detail="Treatment not found or not authorized."
+            )
+    else:
+        # Lógica de criação
+        result = pets_collection.update_one(
+            {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
+            {"$push": {"treatments": treatment_data}},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=404, detail="Pet not found or not authorized."
+            )
+
+    return RedirectResponse(
+        url="/pets/" + pet_id + "/profile", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.get("/pets/{pet_id}/treatments/{treatment_id}/edit")
+def edit_treatment_page(
+    pet_id: str,
+    treatment_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    user_id = user["id"]
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet not found.")
+
+    treatment = next(
+        (t for t in pet.get("treatments", []) if str(t["_id"]) == treatment_id), None
+    )
+    if not treatment:
+        raise HTTPException(status_code=404, detail="Treatment not found.")
+
+    treatment["_id"] = str(treatment["_id"])
+
+    return templates.TemplateResponse(
+        "treatment_form.html", {"request": request, "pet": pet, "treatment": treatment}
+    )
+
+
+@app.post("/pets/{pet_id}/treatments/{treatment_id}/delete")
+def delete_treatment(
+    pet_id: str,
+    treatment_id: str,
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    user_id = user["id"]
+
+    result = pets_collection.update_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
+        {"$pull": {"treatments": {"_id": ObjectId(treatment_id)}}},
+    )
+
+    if result.matched_count == 0 or result.modified_count == 0:
+        raise HTTPException(
+            status_code=404, detail="Treatment not found or not authorized."
+        )
+
+    return RedirectResponse(
+        url="/pets/" + pet_id + "/profile", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.get("/generate-pet-name")
+def generate_pet_name(gender: str = Query(...)):
+    """
+    Gera uma lista de nomes de pet ou comidas baseada no gênero.
+    """
+    if gender not in ["male", "female"]:
+        return {"names": ["Selecione um gênero válido."]}
+
+    nomes_comuns_unissex = ["Pingo", "Bolinha", "Mel", "Pipoca", "Amora", "Jade", "Max"]
+    nomes = []
+
+    # 50% de chance de gerar nomes de pet ou de comida
+    if random.choice([True, False]):
+        # Nomes de pet
+        if gender == "male":
+            nomes.extend([fake.first_name_male() for _ in range(5)])
+        else:
+            nomes.extend([fake.first_name_female() for _ in range(5)])
+
+        # Adiciona alguns nomes unissex
+        nomes.extend(random.sample(nomes_comuns_unissex, 5))
+    else:
+        # Nomes de comida
+        nomes.extend([fake.dish() for _ in range(10)])
+
+    # Remove duplicatas e retorna a lista
+    return {"names": list(set(nomes))}

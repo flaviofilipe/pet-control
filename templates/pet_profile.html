@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil de {{ pet.name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" xintegrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .badge-scheduled {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        .badge-expired {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+        .badge-done {
+            background-color: #e0f2f1;
+            color: #00796b;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <header class="bg-[#5c6e5e] text-white shadow-md p-4 sticky top-0 z-50">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/dashboard" class="text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                </a>
+            </div>
+            <h1 class="text-xl font-semibold">Perfil de {{ pet.name }}</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/pets/{{ pet._id }}/treatments/add" class="bg-[#e57373] hover:bg-[#d56b6b] text-white px-4 py-2 rounded-md font-medium transition-colors duration-200">
+                    <i class="fas fa-plus-circle mr-2"></i> Adicionar Tratamento
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 flex-grow">
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <div class="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
+                <div class="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-5xl font-bold text-gray-400 overflow-hidden">
+                    <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }}"></i>
+                </div>
+                <div class="flex-1 text-center md:text-left">
+                    <h2 class="text-3xl font-extrabold text-[#5c6e5e] mb-2">{{ pet.name }}</h2>
+                    <p class="text-xl text-gray-600 mb-4">{{ pet.breed }}</p>
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2 text-gray-700">
+                            <i class="fas fa-tag text-terracotta"></i>
+                            <span>Nickname: <span class="font-semibold">{{ pet.nickname or 'Não informado' }}</span></span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-gray-700">
+                            <i class="fas fa-id-card-alt text-terracotta"></i>
+                            <span>Pedigree: <span class="font-semibold">{{ pet.pedigree_number or 'Não informado' }}</span></span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-gray-700">
+                            <i class="fas fa-birthday-cake text-terracotta"></i>
+                            <span>Nascimento: <span class="font-semibold">{{ pet.birth_date }}</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 flex flex-col space-y-2">
+                    <a href="/pets/{{ pet._id }}/edit" class="bg-blue-500 text-white px-4 py-2 rounded-md font-medium text-center hover:bg-blue-600 transition-colors duration-200">
+                        <i class="fas fa-pencil-alt mr-2"></i> Editar Pet
+                    </a>
+                    <form action="/pets/{{ pet._id }}/delete" method="post" class="inline">
+                        <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded-md font-medium text-center hover:bg-red-600 transition-colors duration-200" onclick="return confirm('Tem certeza que deseja excluir este pet? Ele não será removido permanentemente.');">
+                            <i class="fas fa-trash-alt mr-2"></i> Excluir Pet
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h3 class="text-xl font-bold text-[#5c6e5e] mb-4">Buscar Tratamento</h3>
+            <form method="get" action="/pets/{{ pet._id }}/profile" class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                <input type="text" name="search" placeholder="Pesquisar por nome, categoria ou data..." class="flex-1 p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#e57373]">
+                <button type="submit" class="bg-[#e57373] text-white p-3 rounded-md font-semibold hover:bg-[#d56b6b] transition-colors duration-300">
+                    <i class="fas fa-search mr-2"></i> Buscar
+                </button>
+            </form>
+        </div>
+
+        <div class="mb-8">
+            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Tratamentos Agendados</h3>
+            <div class="space-y-4">
+                {% if not scheduled_treatments %}
+                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento agendado.</div>
+                {% else %}
+                    {% for treatment in scheduled_treatments %}
+                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 transition-all hover:shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
+                                <span class="badge-scheduled text-xs font-medium px-2.5 py-0.5 rounded-full">Agendado</span>
+                            </div>
+                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
+                            <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                <span class="flex items-center"><i class="fas fa-calendar-alt mr-1 text-terracotta"></i> {{ treatment.date }}</span>
+                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            </div>
+                             <div class="flex items-center text-sm text-gray-500 mt-2">
+                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
+                            </div>
+                            <div class="mt-4 flex space-x-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
+                                    <i class="fas fa-pencil-alt"></i> Editar
+                                </a>
+                                <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
+                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
+                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mb-8">
+            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Tratamentos Expirados</h3>
+            <div class="space-y-4">
+                {% if not expired_treatments %}
+                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento expirado.</div>
+                {% else %}
+                    {% for treatment in expired_treatments %}
+                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 transition-all hover:shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
+                                <span class="badge-expired text-xs font-medium px-2.5 py-0.5 rounded-full">Expirado</span>
+                            </div>
+                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
+                            <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                <span class="flex items-center"><i class="fas fa-calendar-times mr-1 text-terracotta"></i> {{ treatment.date }}</span>
+                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            </div>
+                             <div class="flex items-center text-sm text-gray-500 mt-2">
+                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
+                            </div>
+                            <div class="mt-4 flex space-x-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
+                                    <i class="fas fa-pencil-alt"></i> Editar
+                                </a>
+                                <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
+                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
+                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Histórico de Tratamentos</h3>
+            <div class="space-y-4">
+                {% if not done_treatments %}
+                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento concluído.</div>
+                {% else %}
+                    {% for treatment in done_treatments %}
+                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 transition-all hover:shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
+                                <span class="badge-done text-xs font-medium px-2.5 py-0.5 rounded-full">Concluído</span>
+                            </div>
+                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
+                            <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                <span class="flex items-center"><i class="fas fa-calendar-check mr-1 text-terracotta"></i> {{ treatment.date }}</span>
+                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            </div>
+                             <div class="flex items-center text-sm text-gray-500 mt-2">
+                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
+                            </div>
+                            <div class="mt-4 flex space-x-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
+                                    <i class="fas fa-pencil-alt"></i> Editar
+                                </a>
+                                <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
+                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
+                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-200 text-center text-gray-600 p-4 mt-8">
+        &copy; {{ pet.current_year }} Patas Digitais. Todos os direitos reservados.
+    </footer>
+</body>
+</html>
