@@ -15,7 +15,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import RedirectResponse
+from starlette.responses import RedirectResponse, JSONResponse
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
@@ -25,6 +25,9 @@ from datetime import datetime
 import random
 from faker import Faker
 from faker_food import FoodProvider
+import logging
+
+logging.basicConfig(level=logging.ERROR)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -88,6 +91,23 @@ templates = Jinja2Templates(directory="templates")
 # Servindo arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Tratamento de erro global para redirecionar usuários não autenticados
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Tratamento global de exceções HTTP.
+    Redireciona usuários não autenticados para a tela de login.
+    """
+    if exc.status_code == 401:
+        # Para rotas que renderizam templates, redireciona para login
+        return RedirectResponse(url="/login", status_code=302)
+    
+    # Para outras exceções HTTP, retorna a resposta padrão
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 # Inicializa Faker e adiciona provedor de alimentos
 fake = Faker("pt_BR")
 fake.add_provider(FoodProvider)
@@ -149,7 +169,7 @@ def refresh_auth_token(refresh_token: str) -> dict:
     return response.json()
 
 
-def get_current_user_info_from_session(request: Request):
+def get_current_user_info_from_session(request: Request) -> dict | Exception:
     """
     Dependência para obter informações do usuário a partir da sessão.
     Renova o token automaticamente se necessário.
@@ -158,6 +178,7 @@ def get_current_user_info_from_session(request: Request):
     refresh_token = request.session.get("refresh_token")
 
     if not access_token:
+        # Lança exceção para que o FastAPI lide com o redirecionamento
         raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -202,17 +223,20 @@ def get_current_user_info_from_session(request: Request):
             except requests.exceptions.RequestException as refresh_err:
                 print(f"Token refresh failed: {refresh_err}. Forcing re-login.")
                 request.session.clear()
+                # Lança exceção para que o FastAPI lide com o redirecionamento
                 raise HTTPException(
                     status_code=401,
                     detail="Could not refresh credentials. Please log in again.",
                 )
         else:
             print(f"Auth0 UserInfo request failed with HTTP error: {http_err}")
-            raise HTTPException(
-                status_code=401, detail="Could not validate credentials"
-            )
+            # Lança exceção para que o FastAPI lide com o redirecionamento
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
     except requests.exceptions.RequestException as e:
         print(f"Auth0 UserInfo request failed: {e}")
+        logging.error(f"Auth0 UserInfo request failed: {e}")
+
+        # Lança exceção para que o FastAPI lide com o redirecionamento
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
@@ -330,9 +354,10 @@ def get_landing_page(request: Request):
 def login():
     """
     Redireciona o usuário para o Auth0 para autenticação.
+    Sempre força o usuário a digitar as credenciais.
     """
     return RedirectResponse(
-        url=f"https://{AUTH0_DOMAIN}/authorize?audience={AUTH0_API_AUDIENCE}&response_type=code&client_id={CLIENT_ID}&scope=offline_access openid profile email&redirect_uri={AUTH0_CALLBACK_URI}"
+        url=f"https://{AUTH0_DOMAIN}/authorize?audience={AUTH0_API_AUDIENCE}&response_type=code&client_id={CLIENT_ID}&scope=offline_access openid profile email&redirect_uri={AUTH0_CALLBACK_URI}&prompt=login"
     )
 
 
@@ -344,29 +369,32 @@ def get_dashboard_page(
     Renderiza a página do dashboard para usuários autenticados,
     passando os dados do usuário e a lista de pets para o template.
     """
-    is_authenticated = "access_token" in request.session
-    user_id = user["id"]
-    # Filtra apenas pets que não foram deletados
-    pets_cursor = pets_collection.find({"users": user_id, "deleted_at": None})
-    pets_list = []
-    for pet in pets_cursor:
-        pet["_id"] = str(pet["_id"])
-        if "treatments" in pet:
-            for treatment in pet["treatments"]:
-                treatment["_id"] = str(treatment["_id"])
-        pets_list.append(pet)
+    try:
+        is_authenticated = "access_token" in request.session
+        user_id = user["id"]
+        # Filtra apenas pets que não foram deletados
+        pets_cursor = pets_collection.find({"users": user_id, "deleted_at": None})
+        pets_list = []
+        for pet in pets_cursor:
+            pet["_id"] = str(pet["_id"])
+            if "treatments" in pet:
+                for treatment in pet["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+            pets_list.append(pet)
 
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "is_authenticated": is_authenticated,
-            "current_year": 2024,
-            "user_info": user["info"],
-            "pets": pets_list,
-        },
-    )
-
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "is_authenticated": is_authenticated,
+                "current_year": 2024,
+                "user_info": user["info"],
+                "pets": pets_list,
+            },
+        )
+    except HTTPException as e:
+        print(f"Error fetching dashboard data: {e}")
+       
 
 @app.get("/callback")
 def callback(request: Request, code: str):
@@ -412,10 +440,14 @@ def callback(request: Request, code: str):
 @app.get("/logout")
 def logout(request: Request):
     """
-    Limpa a sessão e redireciona para a página inicial.
+    Limpa a sessão e faz logout completo do Auth0.
     """
     request.session.clear()
-    return RedirectResponse(url="/")
+    
+    # URL de logout do Auth0 que força o usuário a digitar credenciais novamente
+    auth0_logout_url = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={request.base_url}"
+    
+    return RedirectResponse(url=auth0_logout_url)
 
 
 @app.get("/profile")
