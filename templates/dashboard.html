@@ -156,8 +156,58 @@
                     <p class="text-gray-600">Gerencie a saúde e o bem-estar dos seus companheiros aqui.</p>
                 </div>
 
+                <!-- Barra de Pesquisa e Filtros -->
+                <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                    <div class="flex flex-col lg:flex-row gap-4">
+                        <!-- Campo de Pesquisa por Nome -->
+                        <div class="flex-1">
+                            <label for="search-name" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-search mr-2 text-terracotta"></i>Pesquisar por Nome
+                            </label>
+                            <input type="text" 
+                                   id="search-name" 
+                                   placeholder="Digite o nome do pet..."
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-terracotta focus:border-transparent transition-all duration-200">
+                        </div>
+                        
+                        <!-- Filtro por Tipo -->
+                        <div class="lg:w-48">
+                            <label for="filter-type" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-filter mr-2 text-terracotta"></i>Tipo
+                            </label>
+                            <select id="filter-type" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-terracotta focus:border-transparent transition-all duration-200">
+                                <option value="">Todos os tipos</option>
+                                <option value="dog">Cachorro</option>
+                                <option value="cat">Gato</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Filtro por Pedigree -->
+                        <div class="lg:w-48">
+                            <label for="filter-pedigree" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-id-card-alt mr-2 text-terracotta"></i>Pedigree
+                            </label>
+                            <select id="filter-pedigree" 
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-terracotta focus:border-transparent transition-all duration-200">
+                                <option value="">Todos</option>
+                                <option value="with">Com Pedigree</option>
+                                <option value="without">Sem Pedigree</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Botão Limpar Filtros -->
+                        <div class="flex items-end">
+                            <button id="clear-filters" 
+                                    class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center">
+                                <i class="fas fa-times mr-2"></i>Limpar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
         <!-- Seção de Pets -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div id="pets-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {% if not pets %}
                 <div class="col-span-full text-center py-12">
                     <i class="fas fa-paw text-6xl text-gray-400 mb-4"></i>
@@ -165,7 +215,11 @@
                 </div>
             {% else %}
                 {% for pet in pets %}
-                    <a href="/pets/{{ pet._id }}/profile" class="block bg-white rounded-xl shadow-md overflow-hidden p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                    <a href="/pets/{{ pet._id }}/profile" 
+                       class="pet-card block bg-white rounded-xl shadow-md overflow-hidden p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                       data-name="{{ pet.name | lower }}"
+                       data-type="{{ pet.pet_type }}"
+                       data-pedigree="{{ 'with' if pet.pedigree_number else 'without' }}">
                         <div class="flex items-center justify-between mb-4">
                            <h3 class="text-xl font-bold text-[#5c6e5e]">{{ pet.name }}</h3>
                            <span class="text-sm text-gray-500">ID: {{ pet.nickname }}</span>
@@ -244,6 +298,88 @@
                     sidebarOverlay.classList.remove('open');
                 }
             });
+            
+            // Funcionalidade de pesquisa e filtros
+            const searchInput = document.getElementById('search-name');
+            const typeFilter = document.getElementById('filter-type');
+            const pedigreeFilter = document.getElementById('filter-pedigree');
+            const clearButton = document.getElementById('clear-filters');
+            const petCards = document.querySelectorAll('.pet-card');
+            
+            function filterPets() {
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                const selectedType = typeFilter.value;
+                const selectedPedigree = pedigreeFilter.value;
+                
+                let visibleCount = 0;
+                
+                petCards.forEach(card => {
+                    const petName = card.getAttribute('data-name');
+                    const petType = card.getAttribute('data-type');
+                    const petPedigree = card.getAttribute('data-pedigree');
+                    
+                    let showCard = true;
+                    
+                    // Filtro por nome
+                    if (searchTerm && !petName.includes(searchTerm)) {
+                        showCard = false;
+                    }
+                    
+                    // Filtro por tipo
+                    if (selectedType && petType !== selectedType) {
+                        showCard = false;
+                    }
+                    
+                    // Filtro por pedigree
+                    if (selectedPedigree && petPedigree !== selectedPedigree) {
+                        showCard = false;
+                    }
+                    
+                    if (showCard) {
+                        card.style.display = 'block';
+                        visibleCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+                
+                // Mostra mensagem se nenhum pet for encontrado
+                const noResultsMessage = document.getElementById('no-results-message');
+                if (visibleCount === 0 && petCards.length > 0) {
+                    if (!noResultsMessage) {
+                        const grid = document.getElementById('pets-grid');
+                        const message = document.createElement('div');
+                        message.id = 'no-results-message';
+                        message.className = 'col-span-full text-center py-12';
+                        message.innerHTML = `
+                            <i class="fas fa-search text-6xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600 text-lg">Nenhum pet encontrado com os filtros aplicados.</p>
+                            <button onclick="clearFilters()" class="mt-4 text-terracotta hover:text-red-600 font-medium">
+                                <i class="fas fa-times mr-2"></i>Limpar filtros
+                            </button>
+                        `;
+                        grid.appendChild(message);
+                    }
+                } else if (noResultsMessage) {
+                    noResultsMessage.remove();
+                }
+            }
+            
+            function clearFilters() {
+                searchInput.value = '';
+                typeFilter.value = '';
+                pedigreeFilter.value = '';
+                filterPets();
+            }
+            
+            // Event listeners
+            searchInput.addEventListener('input', filterPets);
+            typeFilter.addEventListener('change', filterPets);
+            pedigreeFilter.addEventListener('change', filterPets);
+            clearButton.addEventListener('click', clearFilters);
+            
+            // Função global para o botão de limpar filtros na mensagem
+            window.clearFilters = clearFilters;
         });
     </script>
 </body>

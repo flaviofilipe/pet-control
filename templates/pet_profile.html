@@ -3,216 +3,797 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perfil de {{ pet.name }}</title>
+    <title>Perfil de {{ pet.name }} - Pet Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" xintegrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
+        :root {
+            --primary-sage: #5c6e5e;
+            --primary-terracotta: #e57373;
+            --primary-terracotta-hover: #d56b6b;
+            --background-warm: #faf9f7;
+            --text-primary: #2d3748;
+            --text-secondary: #4a5568;
+            --text-muted: #718096;
+            --border-light: #e2e8f0;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-medium: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f4f2ea;
-            color: #4b4b4b;
+            background: linear-gradient(135deg, #faf9f7 0%, #f4f2ea 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
         }
-        .bg-terracotta { background-color: #e57373; }
-        .text-terracotta { color: #e57373; }
+        
+        .bg-sage { background-color: var(--primary-sage); }
+        .text-sage { color: var(--primary-sage); }
+        .bg-terracotta { background-color: var(--primary-terracotta); }
+        .text-terracotta { color: var(--primary-terracotta); }
+        .hover-terracotta:hover { background-color: var(--primary-terracotta-hover); }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--shadow-soft);
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-medium);
+            transform: translateY(-2px);
+        }
+        
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
         .badge-scheduled {
-            background-color: #d1e7dd;
-            color: #0f5132;
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
         }
+        
         .badge-expired {
-            background-color: #f8d7da;
-            color: #842029;
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
         }
+        
         .badge-done {
-            background-color: #e0f2f1;
-            color: #00796b;
+            background-color: #e0f2fe;
+            color: #0c4a6e;
+            border: 1px solid #bae6fd;
+        }
+        
+        .treatment-card {
+            border-left: 4px solid;
+            transition: all 0.2s ease;
+        }
+        
+        .treatment-card.scheduled { border-left-color: #10b981; }
+        .treatment-card.expired { border-left-color: #ef4444; }
+        .treatment-card.done { border-left-color: #3b82f6; }
+        
+        .treatment-card:hover {
+            transform: translateX(4px);
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .info-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+            transition: all 0.2s ease;
+        }
+        
+        .info-item:hover {
+            background: #f1f5f9;
+            border-color: var(--primary-terracotta);
+            transform: translateY(-1px);
+        }
+        
+        .info-item i {
+            width: 24px;
+            margin-right: 0.75rem;
+            color: var(--primary-terracotta);
+            margin-top: 0.125rem;
+            flex-shrink: 0;
+        }
+        
+        .info-item div {
+            flex: 1;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border-light);
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-sage);
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+        
+        .empty-state h4 {
+            color: var(--text-primary);
+        }
+        
+        .empty-state p {
+            color: var(--text-secondary);
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            height: 3rem;
+            min-height: 3rem;
+        }
+        
+        .btn i {
+            font-size: 0.875rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-terracotta);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-terracotta-hover);
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #2563eb;
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #dc2626;
+            transform: translateY(-1px);
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            color: var(--primary-sage);
+            border: 2px solid var(--primary-sage);
+        }
+        
+        .btn-outline:hover {
+            background-color: var(--primary-sage);
+            color: white;
+        }
+        
+        .search-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 1rem 1rem 1rem 3rem;
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            background: white;
+            height: 3rem;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-terracotta);
+            box-shadow: 0 0 0 3px rgba(229, 115, 115, 0.1);
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .pet-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 4px solid white;
+            box-shadow: var(--shadow-medium);
+            overflow: hidden;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+        }
+        
+        .pet-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .pet-avatar i {
+            font-size: 3rem;
+            color: var(--text-muted);
+        }
+        
+        @media (max-width: 768px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+            
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .pet-avatar {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .info-item {
+                padding: 0.75rem;
+            }
+            
+            .info-item i {
+                width: 20px;
+                margin-right: 0.5rem;
+            }
+            
+            .section-title {
+                font-size: 1.25rem;
+            }
+            
+            .card {
+                padding: 1rem;
+            }
+            
+            .search-input {
+                height: 2.75rem;
+                padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+            }
+            
+            .btn {
+                height: 2.75rem;
+                min-height: 2.75rem;
+                padding: 0.5rem 1rem;
+            }
+            
+            .btn i {
+                font-size: 0.75rem;
+            }
+            
+            .search-icon {
+                left: 0.75rem;
+            }
+        }
+        
+        /* Acessibilidade */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
+        .focus-visible:focus {
+            outline: 2px solid var(--primary-terracotta);
+            outline-offset: 2px;
         }
     </style>
 </head>
 <body class="flex flex-col min-h-screen">
-    <header class="bg-[#5c6e5e] text-white shadow-md p-4 sticky top-0 z-50">
-        <nav class="container mx-auto flex items-center justify-between">
+    <header class="bg-sage text-white shadow-lg sticky top-0 z-50">
+        <nav class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <!-- Navegação de volta -->
             <div class="flex items-center space-x-4">
-                <a href="/dashboard" class="text-white hover:text-gray-200 transition-colors duration-200">
-                    <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                    <a href="/dashboard" 
+                       class="flex items-center text-white hover:text-gray-200 transition-colors duration-200 focus-visible:focus"
+                       aria-label="Voltar ao dashboard">
+                        <i class="fas fa-arrow-left mr-2" aria-hidden="true"></i>
+                        <span class="font-medium">Dashboard</span>
                 </a>
             </div>
-            <h1 class="text-xl font-semibold">Perfil de {{ pet.name }}</h1>
-            <div class="flex items-center space-x-4">
-                <a href="/pets/{{ pet._id }}/treatments/add" class="bg-[#e57373] hover:bg-[#d56b6b] text-white px-4 py-2 rounded-md font-medium transition-colors duration-200">
-                    <i class="fas fa-plus-circle mr-2"></i> Adicionar Tratamento
-                </a>
+                
+                <!-- Título principal -->
+                <div class="text-center">
+                    <h1 class="text-2xl font-bold">Perfil de {{ pet.name }}</h1>
+                    <p class="text-sm text-gray-200 mt-1">{{ pet.breed }}</p>
+                </div>
+                
+                <!-- Ações principais -->
+                <div class="flex items-center space-x-3">
+                    <a href="/pets/{{ pet._id }}/edit" 
+                       class="btn btn-outline text-white border-white hover:bg-white hover:text-sage focus-visible:focus"
+                       aria-label="Editar informações do pet">
+                        <i class="fas fa-edit mr-2" aria-hidden="true"></i>
+                        <span class="hidden sm:inline">Editar</span>
+                    </a>
+                    <a href="/pets/{{ pet._id }}/treatments/add" 
+                       class="btn btn-primary hover-terracotta focus-visible:focus"
+                       aria-label="Adicionar novo tratamento">
+                        <i class="fas fa-plus-circle mr-2" aria-hidden="true"></i>
+                        <span class="hidden sm:inline">Adicionar Tratamento</span>
+                        <span class="sm:hidden">Adicionar</span>
+                    </a>
+                </div>
             </div>
         </nav>
     </header>
 
-    <main class="container mx-auto px-4 py-8 flex-grow">
-        <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
-            <div class="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
-                <!-- Foto do Pet -->
-                <div class="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-5xl font-bold text-gray-400 overflow-hidden">
-                    {% if pet.photo %}
-                        <img src="/uploads/{{ pet._id }}/thumb_{{ pet.photo.filename }}" 
-                             alt="Foto de {{ pet.name }}" 
-                             class="w-full h-full object-cover rounded-full">
-                    {% else %}
-                        <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }}"></i>
-                    {% endif %}
+    <main class="container mx-auto px-4 py-8 flex-grow max-w-6xl">
+        <!-- Seção Principal do Pet -->
+        <section class="card p-8 mb-8" aria-labelledby="pet-info">
+            <div class="flex flex-col lg:flex-row items-center lg:items-start space-y-8 lg:space-y-0 lg:space-x-8">
+                <!-- Avatar do Pet -->
+                <div class="flex-shrink-0">
+                    <div class="pet-avatar flex items-center justify-center">
+                        {% if pet.photo %}
+                            <img src="/uploads/{{ pet._id }}/thumb_{{ pet.photo.filename }}" 
+                                 alt="Foto de {{ pet.name }}" 
+                                 class="w-full h-full object-cover">
+                        {% else %}
+                            <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }}" aria-hidden="true"></i>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="flex-1 text-center md:text-left">
-                    <h2 class="text-3xl font-extrabold text-[#5c6e5e] mb-2">{{ pet.name }}</h2>
-                    <p class="text-xl text-gray-600 mb-4">{{ pet.breed }}</p>
-                    <div class="space-y-2">
-                        <div class="flex items-center space-x-2 text-gray-700">
-                            <i class="fas fa-tag text-terracotta"></i>
-                            <span>Nickname: <span class="font-semibold">{{ pet.nickname or 'Não informado' }}</span></span>
+                
+                <!-- Informações do Pet -->
+                <div class="flex-1 text-center lg:text-left">
+                    <div class="mb-6">
+                        <h2 id="pet-info" class="text-4xl font-bold text-sage mb-2">{{ pet.name }}</h2>
+                        <p class="text-xl text-gray-700 mb-4">{{ pet.breed }}</p>
+                        <div class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-opacity-20 text-sage border border-sage border-opacity-30">
+                            <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }} mr-2" aria-hidden="true"></i>
+                            {{ 'Cão' if pet.pet_type == 'dog' else 'Gato' }}
                         </div>
-                        <div class="flex items-center space-x-2 text-gray-700">
-                            <i class="fas fa-id-card-alt text-terracotta"></i>
-                            <span>Pedigree: <span class="font-semibold">{{ pet.pedigree_number or 'Não informado' }}</span></span>
+                    </div>
+                    
+                    <!-- Grid de Informações -->
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <i class="fas fa-tag" aria-hidden="true"></i>
+                            <div>
+                                <span class="text-sm text-gray-600 block font-medium">Código</span>
+                                <span class="font-semibold text-gray-900">{{ pet.nickname or 'Não informado' }}</span>
+                            </div>
                         </div>
-                        <div class="flex items-center space-x-2 text-gray-700">
-                            <i class="fas fa-birthday-cake text-terracotta"></i>
-                            <span>Nascimento: <span class="font-semibold">{{ pet.birth_date }}</span></span>
+                        
+                        <div class="info-item">
+                            <i class="fas fa-id-card-alt" aria-hidden="true"></i>
+                            <div>
+                                <span class="text-sm text-gray-600 block font-medium">Pedigree</span>
+                                <span class="font-semibold text-gray-900">{{ pet.pedigree_number or 'Não informado' }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <i class="fas fa-birthday-cake" aria-hidden="true"></i>
+                            <div>
+                                <span class="text-sm text-gray-600 block font-medium">Data de Nascimento</span>
+                                <span class="font-semibold text-gray-900">{{ pet.birth_date_formatted or pet.birth_date }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            <div>
+                                <span class="text-sm text-gray-600 block font-medium">Idade</span>
+                                <span class="font-semibold text-gray-900">
+                                    {% if pet.age %}
+                                        {{ pet.age }}
+                                    {% else %}
+                                        Calculando...
+                                    {% endif %}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="flex-shrink-0 flex flex-col space-y-2">
-                    <a href="/pets/{{ pet._id }}/edit" class="bg-blue-500 text-white px-4 py-2 rounded-md font-medium text-center hover:bg-blue-600 transition-colors duration-200">
-                        <i class="fas fa-pencil-alt mr-2"></i> Editar Pet
-                    </a>
+                
+                <!-- Ações Secundárias -->
+                <div class="flex-shrink-0 flex flex-col space-y-3 lg:min-w-[200px]">
                     <form action="/pets/{{ pet._id }}/delete" method="post" class="inline">
-                        <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded-md font-medium text-center hover:bg-red-600 transition-colors duration-200" onclick="return confirm('Tem certeza que deseja excluir este pet? Ele não será removido permanentemente.');">
-                            <i class="fas fa-trash-alt mr-2"></i> Excluir Pet
+                        <button type="submit" 
+                                class="btn btn-danger w-full focus-visible:focus" 
+                                onclick="return confirm('Tem certeza que deseja excluir este pet? Esta ação não pode ser desfeita.');"
+                                aria-label="Excluir pet {{ pet.name }}">
+                            <i class="fas fa-trash-alt mr-2" aria-hidden="true"></i>
+                            Excluir Pet
                         </button>
                     </form>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h3 class="text-xl font-bold text-[#5c6e5e] mb-4">Buscar Tratamento</h3>
-            <form method="get" action="/pets/{{ pet._id }}/profile" class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                <input type="text" name="search" placeholder="Pesquisar por nome, categoria ou data..." class="flex-1 p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#e57373]">
-                <button type="submit" class="bg-[#e57373] text-white p-3 rounded-md font-semibold hover:bg-[#d56b6b] transition-colors duration-300">
-                    <i class="fas fa-search mr-2"></i> Buscar
+        <!-- Seção de Busca -->
+        <section class="card p-6 mb-8" aria-labelledby="search-section">
+            <div class="section-header">
+                <h3 id="search-section" class="section-title">
+                    <i class="fas fa-search mr-3 text-terracotta" aria-hidden="true"></i>
+                    Buscar Tratamentos
+                </h3>
+            </div>
+            <form method="get" action="/pets/{{ pet._id }}/profile" class="flex flex-col sm:flex-row gap-4">
+                <div class="search-container flex-1">
+                    <i class="fas fa-search search-icon" aria-hidden="true"></i>
+                    <input type="text" 
+                           name="search" 
+                           placeholder="Pesquisar por nome, categoria ou data..." 
+                           class="search-input"
+                           value="{{ search or '' }}"
+                           aria-label="Buscar tratamentos">
+                </div>
+                <button type="submit" 
+                        class="btn btn-primary w-full sm:w-auto sm:min-w-[120px] focus-visible:focus"
+                        aria-label="Executar busca">
+                    <i class="fas fa-search mr-2" aria-hidden="true"></i>
+                    Buscar
                 </button>
             </form>
+        </section>
+
+        <!-- Tratamentos Agendados -->
+        <section class="mb-8" aria-labelledby="scheduled-treatments">
+            <div class="section-header">
+                <h3 id="scheduled-treatments" class="section-title">
+                    <i class="fas fa-calendar-check mr-3 text-green-600" aria-hidden="true"></i>
+                    Tratamentos Agendados
+                    {% if scheduled_treatments %}
+                        <span class="badge badge-scheduled ml-3">{{ scheduled_treatments|length }}</span>
+                    {% endif %}
+                </h3>
         </div>
 
-        <div class="mb-8">
-            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Tratamentos Agendados</h3>
             <div class="space-y-4">
                 {% if not scheduled_treatments %}
-                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento agendado.</div>
+                    <div class="empty-state">
+                        <i class="fas fa-calendar-plus" aria-hidden="true"></i>
+                        <h4 class="text-lg font-semibold mb-2">Nenhum tratamento agendado</h4>
+                        <p class="text-gray-500 mb-4">Adicione tratamentos para manter o histórico do seu pet organizado.</p>
+                        <a href="/pets/{{ pet._id }}/treatments/add" class="btn btn-primary">
+                            <i class="fas fa-plus mr-2 text-sm" aria-hidden="true"></i>
+                            Adicionar Tratamento
+                        </a>
+                    </div>
                 {% else %}
                     {% for treatment in scheduled_treatments %}
-                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 transition-all hover:shadow-lg">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
-                                <span class="badge-scheduled text-xs font-medium px-2.5 py-0.5 rounded-full">Agendado</span>
+                        <article class="card treatment-card scheduled p-6" aria-labelledby="treatment-{{ treatment._id }}">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex-1">
+                                    <h4 id="treatment-{{ treatment._id }}" class="text-xl font-bold text-sage mb-2">
+                                        {{ treatment.name }}
+                                    </h4>
+                                    <p class="text-gray-600 mb-3">{{ treatment.description }}</p>
+                                </div>
+                                <span class="badge badge-scheduled ml-4">Agendado</span>
                             </div>
-                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
-                            <div class="flex items-center text-sm text-gray-500 space-x-4">
-                                <span class="flex items-center"><i class="fas fa-calendar-alt mr-1 text-terracotta"></i> {{ treatment.date }}</span>
-                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-calendar-alt mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.date_formatted or treatment.date }}</span>
+                                </div>
+                                {% if treatment.time %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-clock mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.time }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-user-tag mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                             <div class="flex items-center text-sm text-gray-500 mt-2">
-                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                            <div class="mt-4 flex space-x-2">
-                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
-                                    <i class="fas fa-pencil-alt"></i> Editar
+                            
+                            <div class="flex flex-wrap gap-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" 
+                                   class="btn btn-secondary focus-visible:focus"
+                                   aria-label="Editar tratamento {{ treatment.name }}">
+                                    <i class="fas fa-edit mr-2" aria-hidden="true"></i>
+                                    Editar
                                 </a>
                                 <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
-                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
-                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    <button type="submit" 
+                                            class="btn btn-danger focus-visible:focus"
+                                            onclick="return confirm('Tem certeza que deseja excluir este tratamento?');"
+                                            aria-label="Excluir tratamento {{ treatment.name }}">
+                                        <i class="fas fa-trash-alt mr-2" aria-hidden="true"></i>
+                                        Excluir
                                     </button>
                                 </form>
                             </div>
-                        </div>
+                        </article>
                     {% endfor %}
                 {% endif %}
             </div>
+        </section>
+
+        <!-- Tratamentos Expirados -->
+        <section class="mb-8" aria-labelledby="expired-treatments">
+            <div class="section-header">
+                <h3 id="expired-treatments" class="section-title">
+                    <i class="fas fa-exclamation-triangle mr-3 text-red-500" aria-hidden="true"></i>
+                    Tratamentos Expirados
+                    {% if expired_treatments %}
+                        <span class="badge badge-expired ml-3">{{ expired_treatments|length }}</span>
+                    {% endif %}
+                </h3>
         </div>
 
-        <div class="mb-8">
-            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Tratamentos Expirados</h3>
             <div class="space-y-4">
                 {% if not expired_treatments %}
-                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento expirado.</div>
+                    <div class="empty-state">
+                        <i class="fas fa-check-circle text-green-500" aria-hidden="true"></i>
+                        <h4 class="text-lg font-semibold mb-2">Nenhum tratamento expirado</h4>
+                        <p class="text-gray-500">Ótimo! Todos os tratamentos estão em dia.</p>
+                    </div>
                 {% else %}
                     {% for treatment in expired_treatments %}
-                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 transition-all hover:shadow-lg">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
-                                <span class="badge-expired text-xs font-medium px-2.5 py-0.5 rounded-full">Expirado</span>
+                        <article class="card treatment-card expired p-6" aria-labelledby="treatment-expired-{{ treatment._id }}">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex-1">
+                                    <h4 id="treatment-expired-{{ treatment._id }}" class="text-xl font-bold text-sage mb-2">
+                                        {{ treatment.name }}
+                                    </h4>
+                                    <p class="text-gray-600 mb-3">{{ treatment.description }}</p>
+                                </div>
+                                <span class="badge badge-expired ml-4">Expirado</span>
                             </div>
-                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
-                            <div class="flex items-center text-sm text-gray-500 space-x-4">
-                                <span class="flex items-center"><i class="fas fa-calendar-times mr-1 text-terracotta"></i> {{ treatment.date }}</span>
-                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-calendar-times mr-2 text-red-500" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.date_formatted or treatment.date }}</span>
+                                </div>
+                                {% if treatment.time %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-clock mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.time }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-user-tag mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                             <div class="flex items-center text-sm text-gray-500 mt-2">
-                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                            <div class="mt-4 flex space-x-2">
-                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
-                                    <i class="fas fa-pencil-alt"></i> Editar
+                            
+                            <div class="flex flex-wrap gap-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" 
+                                   class="btn btn-secondary focus-visible:focus"
+                                   aria-label="Editar tratamento {{ treatment.name }}">
+                                    <i class="fas fa-edit mr-2" aria-hidden="true"></i>
+                                    Editar
                                 </a>
                                 <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
-                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
-                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    <button type="submit" 
+                                            class="btn btn-danger focus-visible:focus"
+                                            onclick="return confirm('Tem certeza que deseja excluir este tratamento?');"
+                                            aria-label="Excluir tratamento {{ treatment.name }}">
+                                        <i class="fas fa-trash-alt mr-2" aria-hidden="true"></i>
+                                        Excluir
                                     </button>
                                 </form>
                             </div>
-                        </div>
+                        </article>
                     {% endfor %}
                 {% endif %}
             </div>
+        </section>
+
+        <!-- Histórico de Tratamentos -->
+        <section class="mb-8" aria-labelledby="completed-treatments">
+            <div class="section-header">
+                <h3 id="completed-treatments" class="section-title">
+                    <i class="fas fa-history mr-3 text-blue-600" aria-hidden="true"></i>
+                    Histórico de Tratamentos
+                    {% if done_treatments %}
+                        <span class="badge badge-done ml-3">{{ done_treatments|length }}</span>
+                    {% endif %}
+                </h3>
         </div>
 
-        <div>
-            <h3 class="text-2xl font-bold text-[#5c6e5e] mb-4">Histórico de Tratamentos</h3>
             <div class="space-y-4">
                 {% if not done_treatments %}
-                    <div class="p-6 bg-white rounded-xl text-center text-gray-500">Nenhum tratamento concluído.</div>
+                    <div class="empty-state">
+                        <i class="fas fa-clipboard-list" aria-hidden="true"></i>
+                        <h4 class="text-lg font-semibold mb-2">Nenhum tratamento concluído</h4>
+                        <p class="text-gray-500 mb-4">O histórico de tratamentos aparecerá aqui quando você marcar tratamentos como concluídos.</p>
+                        <a href="/pets/{{ pet._id }}/treatments/add" class="btn btn-primary">
+                            <i class="fas fa-plus mr-2 text-sm" aria-hidden="true"></i>
+                            Adicionar Tratamento
+                        </a>
+                    </div>
                 {% else %}
                     {% for treatment in done_treatments %}
-                        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 transition-all hover:shadow-lg">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="text-lg font-bold text-[#5c6e5e]">{{ treatment.name }}</h4>
-                                <span class="badge-done text-xs font-medium px-2.5 py-0.5 rounded-full">Concluído</span>
+                        <article class="card treatment-card done p-6" aria-labelledby="treatment-done-{{ treatment._id }}">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex-1">
+                                    <h4 id="treatment-done-{{ treatment._id }}" class="text-xl font-bold text-sage mb-2">
+                                        {{ treatment.name }}
+                                    </h4>
+                                    <p class="text-gray-600 mb-3">{{ treatment.description }}</p>
+                                </div>
+                                <span class="badge badge-done ml-4">Concluído</span>
                             </div>
-                            <p class="text-gray-600 mb-2">{{ treatment.description }}</p>
-                            <div class="flex items-center text-sm text-gray-500 space-x-4">
-                                <span class="flex items-center"><i class="fas fa-calendar-check mr-1 text-terracotta"></i> {{ treatment.date }}</span>
-                                {% if treatment.time %}<span class="flex items-center"><i class="fas fa-clock mr-1 text-terracotta"></i> {{ treatment.time }}</span>{% endif %}
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-calendar-check mr-2 text-green-500" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.date_formatted or treatment.date }}</span>
+                                </div>
+                                {% if treatment.time %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-clock mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.time }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="flex items-center text-sm text-gray-700">
+                                    <i class="fas fa-user-tag mr-2 text-terracotta" aria-hidden="true"></i>
+                                    <span class="font-medium">{{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                             <div class="flex items-center text-sm text-gray-500 mt-2">
-                                <span class="flex items-center"><i class="fas fa-user-tag mr-1 text-terracotta"></i> Aplicador: {{ treatment.applier_name or treatment.applier_type }}</span>
                             </div>
-                            <div class="mt-4 flex space-x-2">
-                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">
-                                    <i class="fas fa-pencil-alt"></i> Editar
+                            
+                            <div class="flex flex-wrap gap-2">
+                                <a href="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/edit" 
+                                   class="btn btn-secondary focus-visible:focus"
+                                   aria-label="Editar tratamento {{ treatment.name }}">
+                                    <i class="fas fa-edit mr-2" aria-hidden="true"></i>
+                                    Editar
                                 </a>
                                 <form action="/pets/{{ pet._id }}/treatments/{{ treatment._id }}/delete" method="post" class="inline">
-                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600" onclick="return confirm('Tem certeza que deseja excluir este tratamento?');">
-                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    <button type="submit" 
+                                            class="btn btn-danger focus-visible:focus"
+                                            onclick="return confirm('Tem certeza que deseja excluir este tratamento?');"
+                                            aria-label="Excluir tratamento {{ treatment.name }}">
+                                        <i class="fas fa-trash-alt mr-2" aria-hidden="true"></i>
+                                        Excluir
                                     </button>
                                 </form>
                             </div>
-                        </div>
+                        </article>
                     {% endfor %}
                 {% endif %}
             </div>
-        </div>
+        </section>
     </main>
 
-    <footer class="bg-gray-200 text-center text-gray-600 p-4 mt-8">
-        &copy; {{ pet.current_year }} Patas Digitais. Todos os direitos reservados.
+    <footer class="bg-gray-100 border-t border-gray-200 mt-12">
+        <div class="container mx-auto px-4 py-6">
+            <div class="text-center text-gray-600">
+                <p class="text-sm">
+                    &copy; {{ current_year or 2024 }} Pet Control. Todos os direitos reservados.
+                </p>
+                <p class="text-xs mt-2 text-gray-500">
+                    Sistema de gerenciamento de pets com foco na saúde e bem-estar animal.
+                </p>
+            </div>
+        </div>
     </footer>
+
+    <!-- Scripts para melhorar a experiência -->
+    <script>
+        // Melhora a acessibilidade com navegação por teclado
+        document.addEventListener('DOMContentLoaded', function() {
+            // Adiciona suporte para navegação por teclado nos cards
+            const treatmentCards = document.querySelectorAll('.treatment-card');
+            treatmentCards.forEach(card => {
+                card.setAttribute('tabindex', '0');
+                card.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const editButton = card.querySelector('.btn-secondary');
+                        if (editButton) {
+                            editButton.click();
+                        }
+                    }
+                });
+            });
+
+            // Melhora o foco visual
+            const focusableElements = document.querySelectorAll('a, button, input, [tabindex]');
+            focusableElements.forEach(element => {
+                element.addEventListener('focus', function() {
+                    this.classList.add('focus-visible');
+                });
+                element.addEventListener('blur', function() {
+                    this.classList.remove('focus-visible');
+                });
+            });
+
+            // Adiciona animação suave para scroll
+            const links = document.querySelectorAll('a[href^="#"]');
+            links.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+        });
+
+        // Função para confirmar exclusões com mais contexto
+        function confirmDelete(itemName, itemType = 'item') {
+            return confirm(`Tem certeza que deseja excluir ${itemType} "${itemName}"?\n\nEsta ação não pode ser desfeita.`);
+        }
+    </script>
 </body>
 </html>

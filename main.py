@@ -1083,6 +1083,57 @@ def pet_profile_page(
 
     pet["_id"] = str(pet["_id"])
 
+    # Calcula a idade do pet e formata a data
+    try:
+        birth_date_str = pet.get("birth_date", "")
+        if not birth_date_str:
+            pet["age"] = "Data não informada"
+            pet["birth_date_formatted"] = "Não informada"
+        else:
+            # Tenta diferentes formatos de data
+            birth_date = None
+            try:
+                # Formato YYYY-MM-DD (do input type="date")
+                birth_date = datetime.strptime(birth_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                try:
+                    # Formato DD/MM/YYYY (formato brasileiro)
+                    birth_date = datetime.strptime(birth_date_str, "%d/%m/%Y").date()
+                except ValueError:
+                    # Formato MM/DD/YYYY (formato americano)
+                    birth_date = datetime.strptime(birth_date_str, "%m/%d/%Y").date()
+            
+            # Formata a data para exibição (DD/MM/YYYY)
+            pet["birth_date_formatted"] = birth_date.strftime("%d/%m/%Y")
+            
+            # Calcula a idade
+            today = datetime.now().date()
+            age_years = today.year - birth_date.year
+            age_months = today.month - birth_date.month
+            
+            if age_months < 0:
+                age_years -= 1
+                age_months += 12
+            
+            # Ajusta se o dia ainda não chegou
+            if today.day < birth_date.day:
+                age_months -= 1
+                if age_months < 0:
+                    age_years -= 1
+                    age_months += 12
+            
+            # Formata a idade
+            if age_years > 0:
+                if age_months > 0:
+                    pet["age"] = f"{age_years} ano{'s' if age_years > 1 else ''} e {age_months} mês{'es' if age_months > 1 else ''}"
+                else:
+                    pet["age"] = f"{age_years} ano{'s' if age_years > 1 else ''}"
+            else:
+                pet["age"] = f"{age_months} mês{'es' if age_months > 1 else ''}"
+    except (ValueError, TypeError):
+        pet["age"] = "Data de nascimento inválida"
+        pet["birth_date_formatted"] = pet.get("birth_date", "Data inválida")
+
     # Processa os tratamentos e aplica o filtro
     treatments = pet.get("treatments", [])
 
@@ -1095,6 +1146,9 @@ def pet_profile_page(
     for t in treatments:
         treatment_date = datetime.strptime(t.get("date"), "%Y-%m-%d").date()
         t["_id"] = str(t["_id"])  # Garante que o ID é string
+        
+        # Formata a data para exibição (DD/MM/YYYY)
+        t["date_formatted"] = treatment_date.strftime("%d/%m/%Y")
 
         if t.get("done"):
             done_treatments.append(t)
@@ -1236,8 +1290,28 @@ async def create_or_update_pet_from_form(
                     {"$set": {"photo": photo_data}}
                 )
     else:
-        random_code = "".join(random.choices("0123456789", k=4))
-        nickname = f"{name.split()[0].lower()}_{random_code}"
+        # Gera nickname único
+        base_name = name.split()[0].lower()
+        nickname = None
+        attempts = 0
+        max_attempts = 100
+        
+        while nickname is None and attempts < max_attempts:
+            random_code = "".join(random.choices("0123456789", k=4))
+            candidate_nickname = f"{base_name}_{random_code}"
+            
+            # Verifica se o nickname já existe
+            existing_pet = pets_collection.find_one({"nickname": candidate_nickname})
+            if not existing_pet:
+                nickname = candidate_nickname
+            else:
+                attempts += 1
+        
+        # Se não conseguiu gerar um nickname único, usa timestamp
+        if nickname is None:
+            import time
+            timestamp = str(int(time.time()))[-6:]  # Últimos 6 dígitos do timestamp
+            nickname = f"{base_name}_{timestamp}"
 
         # Lógica de criação
         pet_data["treatments"] = []
