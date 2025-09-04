@@ -55,11 +55,25 @@
             {% else %}
                 {% for pet in pets %}
                     <a href="/pets/{{ pet._id }}/profile" class="block bg-white rounded-xl shadow-md overflow-hidden p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center justify-between mb-4">
                            <h3 class="text-xl font-bold text-[#5c6e5e]">{{ pet.name }}</h3>
                            <span class="text-sm text-gray-500">ID: {{ pet.nickname }}</span>
                         </div>
-                        <p class="text-gray-600 text-sm mb-4">{{ pet.breed }}</p>
+                        
+                        <!-- Foto do pet -->
+                        <div class="mb-4 flex justify-center">
+                            {% if pet.photo %}
+                                <img src="/uploads/{{ pet._id }}/thumb_{{ pet.photo.filename }}" 
+                                     alt="Foto de {{ pet.name }}" 
+                                     class="w-24 h-24 rounded-full object-cover border-4 border-[#e57373] shadow-lg">
+                            {% else %}
+                                <div class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center border-4 border-gray-300">
+                                    <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }} text-3xl text-gray-400"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <p class="text-gray-600 text-sm mb-4 text-center">{{ pet.breed }}</p>
                         <div class="space-y-2">
                             <div class="flex items-center text-gray-700">
                                 <i class="fas fa-id-card-alt mr-2 text-terracotta"></i>

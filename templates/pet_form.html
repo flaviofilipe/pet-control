@@ -42,15 +42,24 @@
     <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 transform transition-all hover:scale-[1.01] duration-300">
         <h1 class="text-3xl font-extrabold text-[#5c6e5e] mb-6 text-center">{% if pet %}Editar Pet{% else %}Adicionar Novo Pet{% endif %}</h1>
         
-        <form id="pet-form" method="post" action="/pets" class="space-y-6">
+        <form id="pet-form" method="post" action="/pets" enctype="multipart/form-data" class="space-y-6">
             {% if pet %}
             <!-- Campo oculto para enviar o ID do pet para o backend -->
             <input type="hidden" name="pet_id" value="{{ pet._id }}">
             {% endif %}
             
+            {% if error %}
+            <div id="error-container" class="space-y-2">
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                    <strong class="font-bold">Erro!</strong>
+                    <span class="block sm:inline ml-2">{{ error }}</span>
+                </div>
+            </div>
+            {% else %}
             <div id="error-container" class="space-y-2 hidden">
                 <!-- As mensagens de erro serão exibidas aqui -->
             </div>
+            {% endif %}
 
             <div class="flex items-center space-x-4 mb-4">
                 <span class="text-sm font-medium text-gray-700">Gênero: <span class="text-red-500">*</span></span>
@@ -104,6 +113,61 @@
                 <input type="text" id="pedigree_number" name="pedigree_number" value="{{ pet.pedigree_number | default('') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
             </div>
 
+            <div>
+                <label for="photo" class="block text-sm font-medium text-gray-700">Foto do Pet</label>
+                <div class="mt-1 flex items-center space-x-4">
+                    {% if pet and pet.photo %}
+                    <div class="flex-shrink-0">
+                        <img id="current-photo" src="/uploads/{{ pet._id }}/thumb_{{ pet.photo.filename }}" alt="Foto atual do pet" class="h-20 w-20 rounded-lg object-cover">
+                    </div>
+                    {% endif %}
+                    <div class="flex-1">
+                        <input type="file" id="photo" name="photo" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-[#e57373] file:text-white hover:file:bg-[#d56b6b]">
+                        <p class="mt-1 text-xs text-gray-500">Formatos aceitos: {{ supported_formats | join(', ') | upper }}. Tamanho máximo: 10MB.</p>
+                        {% if heic_supported %}
+                        <p class="mt-1 text-xs text-green-600">✓ Suporte a HEIC ativado</p>
+                        {% else %}
+                        <p class="mt-1 text-xs text-orange-600">⚠ HEIC não suportado (instale pillow-heif)</p>
+                        {% endif %}
+                        {% if pet and pet.photo %}
+                        <p class="mt-1 text-xs text-gray-600">Deixe em branco para manter a foto atual.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Preview e Crop da Imagem -->
+                <div id="photo-preview" class="mt-4 hidden">
+                    <div class="mb-4">
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Preview da Imagem</h4>
+                        <div class="relative inline-block">
+                            <img id="preview-image" src="" alt="Preview da foto" class="max-w-full h-auto max-h-64 rounded-lg border-2 border-gray-300">
+                            <div id="crop-overlay" class="absolute inset-0 border-2 border-white shadow-lg rounded-lg cursor-move hidden">
+                                <div class="absolute top-0 left-0 w-3 h-3 bg-white border-2 border-[#e57373] rounded-full cursor-nw-resize" data-handle="nw"></div>
+                                <div class="absolute top-0 right-0 w-3 h-3 bg-white border-2 border-[#e57373] rounded-full cursor-ne-resize" data-handle="ne"></div>
+                                <div class="absolute bottom-0 left-0 w-3 h-3 bg-white border-2 border-[#e57373] rounded-full cursor-sw-resize" data-handle="sw"></div>
+                                <div class="absolute bottom-0 right-0 w-3 h-3 bg-white border-2 border-[#e57373] rounded-full cursor-se-resize" data-handle="se"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-2 mb-4">
+                        <button type="button" id="crop-btn" class="bg-[#e57373] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#d56b6b] transition-colors duration-200">
+                            <i class="fas fa-crop mr-2"></i>Ativar Crop
+                        </button>
+                        <button type="button" id="reset-crop-btn" class="bg-gray-500 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-600 transition-colors duration-200 hidden">
+                            <i class="fas fa-undo mr-2"></i>Resetar Crop
+                        </button>
+                    </div>
+                    
+                    <div id="crop-info" class="text-xs text-gray-600 bg-gray-100 p-2 rounded hidden">
+                        <p>Arraste as bordas para ajustar o crop. Clique e arraste para mover a área de seleção.</p>
+                    </div>
+                </div>
+                
+                <!-- Canvas oculto para o crop -->
+                <canvas id="crop-canvas" class="hidden"></canvas>
+            </div>
+
             <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
                 <a href="/dashboard" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md font-semibold text-center hover:bg-gray-300 transition-colors duration-300">
                     Cancelar
@@ -127,12 +191,27 @@
             const nameInput = document.getElementById('name');
             const nameSuggestionsList = document.getElementById('name-suggestions');
             const birthDateInput = document.getElementById('birth_date');
+            const photoInput = document.getElementById('photo');
+            const photoPreview = document.getElementById('photo-preview');
+            const previewImage = document.getElementById('preview-image');
+            const cropBtn = document.getElementById('crop-btn');
+            const resetCropBtn = document.getElementById('reset-crop-btn');
+            const cropOverlay = document.getElementById('crop-overlay');
+            const cropInfo = document.getElementById('crop-info');
+            const cropCanvas = document.getElementById('crop-canvas');
 
             let dogBreeds = [];
             let catBreeds = [];
             let currentBreeds = [];
             let generatedNames = [];
             let timeoutId;
+            
+            // Variáveis para crop
+            let isCropping = false;
+            let cropStartX, cropStartY;
+            let cropRect = { x: 0, y: 0, width: 0, height: 0 };
+            let isDragging = false;
+            let dragHandle = null;
 
             const getDogBreeds = async () => {
                 const url = "https://dog.ceo/api/breeds/list/all";
@@ -334,6 +413,35 @@
             generateNameBtn.addEventListener('click', generateNames);
             genderRadios.forEach(radio => radio.addEventListener('change', toggleGenerateButton));
 
+            // Preview da imagem
+            photoInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    if (file.size > 10 * 1024 * 1024) {
+                        alert('Arquivo muito grande. Tamanho máximo: 10MB');
+                        photoInput.value = '';
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        previewImage.src = e.target.result;
+                        photoPreview.classList.remove('hidden');
+                        
+                        // Reset crop quando nova imagem é carregada
+                        resetCrop();
+                        
+                        // Configura crop após imagem carregar
+                        previewImage.onload = () => {
+                            setupCrop();
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    photoPreview.classList.add('hidden');
+                }
+            });
+
             // Chamada inicial para popular a lista de raças se o tipo de pet já estiver selecionado
             const initialPetType = petTypeSelect.value;
             if (initialPetType) {
@@ -341,6 +449,167 @@
             }
 
             toggleGenerateButton();
+            
+            // Funções de Crop
+            function setupCrop() {
+                const rect = previewImage.getBoundingClientRect();
+                cropRect = {
+                    x: rect.width * 0.1,
+                    y: rect.height * 0.1,
+                    width: rect.width * 0.8,
+                    height: rect.height * 0.8
+                };
+                updateCropOverlay();
+            }
+            
+            function updateCropOverlay() {
+                if (!cropOverlay) return;
+                
+                cropOverlay.style.left = cropRect.x + 'px';
+                cropOverlay.style.top = cropRect.y + 'px';
+                cropOverlay.style.width = cropRect.width + 'px';
+                cropOverlay.style.height = cropRect.height + 'px';
+            }
+            
+            function resetCrop() {
+                isCropping = false;
+                cropOverlay.classList.add('hidden');
+                resetCropBtn.classList.add('hidden');
+                cropInfo.classList.add('hidden');
+                cropBtn.textContent = 'Ativar Crop';
+                cropBtn.innerHTML = '<i class="fas fa-crop mr-2"></i>Ativar Crop';
+            }
+            
+            function activateCrop() {
+                isCropping = true;
+                cropOverlay.classList.remove('hidden');
+                resetCropBtn.classList.remove('hidden');
+                cropInfo.classList.remove('hidden');
+                cropBtn.textContent = 'Desativar Crop';
+                cropBtn.innerHTML = '<i class="fas fa-times mr-2"></i>Desativar Crop';
+                setupCrop();
+            }
+            
+            function deactivateCrop() {
+                resetCrop();
+            }
+            
+            // Event listeners para crop
+            cropBtn.addEventListener('click', () => {
+                if (isCropping) {
+                    deactivateCrop();
+                } else {
+                    activateCrop();
+                }
+            });
+            
+            resetCropBtn.addEventListener('click', resetCrop);
+            
+            // Mouse events para crop
+            previewImage.addEventListener('mousedown', (e) => {
+                if (!isCropping) return;
+                
+                const rect = previewImage.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Verifica se clicou em um handle
+                const handle = getHandleAt(x, y);
+                if (handle) {
+                    dragHandle = handle;
+                    isDragging = true;
+                    cropStartX = x;
+                    cropStartY = y;
+                    return;
+                }
+                
+                // Verifica se clicou dentro da área de crop
+                if (x >= cropRect.x && x <= cropRect.x + cropRect.width &&
+                    y >= cropRect.y && y <= cropRect.y + cropRect.height) {
+                    isDragging = true;
+                    cropStartX = x - cropRect.x;
+                    cropStartY = y - cropRect.y;
+                }
+            });
+            
+            previewImage.addEventListener('mousemove', (e) => {
+                if (!isCropping || !isDragging) return;
+                
+                const rect = previewImage.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                if (dragHandle) {
+                    // Redimensiona baseado no handle
+                    resizeCrop(x, y, dragHandle);
+                } else {
+                    // Move a área de crop
+                    moveCrop(x, y);
+                }
+                
+                updateCropOverlay();
+            });
+            
+            previewImage.addEventListener('mouseup', () => {
+                isDragging = false;
+                dragHandle = null;
+            });
+            
+            function getHandleAt(x, y) {
+                const handleSize = 15;
+                const handles = [
+                    { name: 'nw', x: cropRect.x, y: cropRect.y },
+                    { name: 'ne', x: cropRect.x + cropRect.width, y: cropRect.y },
+                    { name: 'sw', x: cropRect.x, y: cropRect.y + cropRect.height },
+                    { name: 'se', x: cropRect.x + cropRect.width, y: cropRect.y + cropRect.height }
+                ];
+                
+                for (const handle of handles) {
+                    if (Math.abs(x - handle.x) <= handleSize && Math.abs(y - handle.y) <= handleSize) {
+                        return handle.name;
+                    }
+                }
+                return null;
+            }
+            
+            function resizeCrop(x, y, handle) {
+                switch (handle) {
+                    case 'nw':
+                        cropRect.width = cropRect.x + cropRect.width - x;
+                        cropRect.height = cropRect.y + cropRect.height - y;
+                        cropRect.x = x;
+                        cropRect.y = y;
+                        break;
+                    case 'ne':
+                        cropRect.width = x - cropRect.x;
+                        cropRect.height = cropRect.y + cropRect.height - y;
+                        cropRect.y = y;
+                        break;
+                    case 'sw':
+                        cropRect.width = cropRect.x + cropRect.width - x;
+                        cropRect.height = y - cropRect.y;
+                        cropRect.x = x;
+                        break;
+                    case 'se':
+                        cropRect.width = x - cropRect.x;
+                        cropRect.height = y - cropRect.y;
+                        break;
+                }
+                
+                // Limita tamanho mínimo
+                cropRect.width = Math.max(50, cropRect.width);
+                cropRect.height = Math.max(50, cropRect.height);
+            }
+            
+            function moveCrop(x, y) {
+                cropRect.x = x - cropStartX;
+                cropRect.y = y - cropStartY;
+                
+                // Limita dentro da imagem
+                const rect = previewImage.getBoundingClientRect();
+                cropRect.x = Math.max(0, Math.min(cropRect.x, rect.width - cropRect.width));
+                cropRect.y = Math.max(0, Math.min(cropRect.y, rect.height - cropRect.height));
+            }
         });
     </script>
 </body>

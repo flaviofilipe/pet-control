@@ -51,8 +51,15 @@
     <main class="container mx-auto px-4 py-8 flex-grow">
         <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
             <div class="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
+                <!-- Foto do Pet -->
                 <div class="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-5xl font-bold text-gray-400 overflow-hidden">
-                    <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }}"></i>
+                    {% if pet.photo %}
+                        <img src="/uploads/{{ pet._id }}/thumb_{{ pet.photo.filename }}" 
+                             alt="Foto de {{ pet.name }}" 
+                             class="w-full h-full object-cover rounded-full">
+                    {% else %}
+                        <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }}"></i>
+                    {% endif %}
                 </div>
                 <div class="flex-1 text-center md:text-left">
                     <h2 class="text-3xl font-extrabold text-[#5c6e5e] mb-2">{{ pet.name }}</h2>

@@ -11,6 +11,8 @@ from fastapi import (
     Response,
     Form,
     Query,
+    UploadFile,
+    File,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
@@ -26,6 +28,20 @@ import random
 from faker import Faker
 from faker_food import FoodProvider
 import logging
+import uuid
+import shutil
+from pathlib import Path
+from PIL import Image
+import io
+
+# Importa suporte a HEIC
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HEIC_SUPPORT = True
+except ImportError:
+    HEIC_SUPPORT = False
+    print("Warning: pillow-heif não instalado. Arquivos HEIC não serão suportados.")
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -51,6 +67,17 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
 DB_NAME = "pet_control"
 COLLECTION_NAME = "profiles"
 PETS_COLLECTION_NAME = "pets"
+
+# File upload configuration
+UPLOAD_DIR = Path("uploads")
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB (aumentado para HEIC)
+
+# Extensões permitidas baseadas no suporte disponível
+BASE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+HEIC_EXTENSIONS = {".heic", ".heif"} if HEIC_SUPPORT else set()
+ALLOWED_EXTENSIONS = BASE_EXTENSIONS | HEIC_EXTENSIONS
+
+THUMBNAIL_SIZE = (300, 300)
 
 # Initialize MongoDB client
 try:
@@ -90,6 +117,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Servindo arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Tratamento de erro global para redirecionar usuários não autenticados
 @app.exception_handler(HTTPException)
@@ -112,6 +140,165 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 fake = Faker("pt_BR")
 fake.add_provider(FoodProvider)
 
+# Cria diretório de uploads se não existir
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+# Funções para manipulação de arquivos
+def validate_image_file(file: UploadFile) -> tuple[bool, str]:
+    """
+    Valida se o arquivo é uma imagem válida.
+    Retorna (is_valid, error_message)
+    """
+    if not file.filename:
+        return False, "Nenhum arquivo selecionado"
+    
+    # Verifica extensão
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        return False, f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS).upper()}"
+    
+    # Verifica se HEIC é suportado
+    if file_ext in ['.heic', '.heif'] and not HEIC_SUPPORT:
+        return False, "Arquivos HEIC não são suportados. Instale pillow-heif ou use outro formato."
+    
+    # Verifica tamanho
+    if file.size and file.size > MAX_FILE_SIZE:
+        max_size_mb = MAX_FILE_SIZE // (1024 * 1024)
+        return False, f"Arquivo muito grande. Tamanho máximo: {max_size_mb}MB"
+    
+    return True, ""
+
+def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
+    """
+    Salva a imagem original e cria uma miniatura.
+    Suporta HEIC/HEIF e outros formatos.
+    Retorna um dicionário com os caminhos dos arquivos.
+    """
+    # Gera nome único para o arquivo
+    file_ext = Path(file.filename).suffix.lower()
+    unique_filename = f"{pet_id}_{uuid.uuid4().hex}{file_ext}"
+    
+    # Cria diretório específico para o pet
+    pet_upload_dir = UPLOAD_DIR / pet_id
+    pet_upload_dir.mkdir(exist_ok=True)
+    
+    # Caminhos dos arquivos
+    original_path = pet_upload_dir / unique_filename
+    thumbnail_path = pet_upload_dir / f"thumb_{unique_filename}"
+    
+    try:
+        # Lê o arquivo
+        contents = file.file.read()
+        
+        # Salva arquivo original
+        with open(original_path, "wb") as f:
+            f.write(contents)
+        
+        # Processa a imagem
+        try:
+            # Para arquivos HEIC, sempre converte para JPEG
+            if file_ext in ['.heic', '.heif']:
+                if HEIC_SUPPORT:
+                    # Usa pillow-heif para ler o arquivo
+                    heif_file = pillow_heif.read_heif(io.BytesIO(contents))
+                    image = Image.frombytes(
+                        heif_file.mode, 
+                        heif_file.size, 
+                        heif_file.data
+                    )
+                else:
+                    # Tenta abrir com PIL (pode falhar)
+                    image = Image.open(io.BytesIO(contents))
+                
+                # Converte para JPEG
+                jpeg_filename = f"{pet_id}_{uuid.uuid4().hex}.jpg"
+                jpeg_path = pet_upload_dir / jpeg_filename
+                
+                # Converte para RGB se necessário
+                if image.mode in ('RGBA', 'LA', 'P'):
+                    image = image.convert('RGB')
+                
+                # Salva como JPEG
+                image.save(jpeg_path, "JPEG", quality=95)
+                
+                # Atualiza caminhos
+                original_path = jpeg_path
+                unique_filename = jpeg_filename
+                
+            else:
+                # Para outros formatos, abre normalmente com PIL
+                image = Image.open(io.BytesIO(contents))
+                    
+        except Exception as e:
+            # Se falhar ao abrir, tenta métodos alternativos
+            if file_ext in ['.heic', '.heif']:
+                try:
+                    # Tenta usar pillow-heif diretamente
+                    if HEIC_SUPPORT:
+                        heif_file = pillow_heif.read_heif(io.BytesIO(contents))
+                        image = Image.frombytes(
+                            heif_file.mode, 
+                            heif_file.size, 
+                            heif_file.data
+                        )
+                        
+                        # Converte para JPEG
+                        jpeg_filename = f"{pet_id}_{uuid.uuid4().hex}.jpg"
+                        jpeg_path = pet_upload_dir / jpeg_filename
+                        
+                        # Converte para RGB se necessário
+                        if image.mode in ('RGBA', 'LA', 'P'):
+                            image = image.convert('RGB')
+                        
+                        # Salva como JPEG
+                        image.save(jpeg_path, "JPEG", quality=95)
+                        
+                        # Atualiza caminhos
+                        original_path = jpeg_path
+                        unique_filename = jpeg_filename
+                        
+                    else:
+                        raise Exception("Arquivo HEIC não pode ser processado. Instale pillow-heif.")
+                except Exception as heic_error:
+                    raise Exception(f"Erro ao processar arquivo HEIC: {str(heic_error)}")
+            else:
+                raise Exception(f"Formato de imagem não suportado: {str(e)}")
+        
+        # Converte para RGB se necessário
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image = image.convert('RGB')
+        
+        # Redimensiona mantendo proporção
+        image.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+        
+        # Salva miniatura
+        image.save(thumbnail_path, "JPEG", quality=85, optimize=True)
+        
+        return {
+            "original": str(original_path),
+            "thumbnail": str(thumbnail_path),
+            "filename": unique_filename
+        }
+        
+    except Exception as e:
+        # Remove arquivos em caso de erro
+        if original_path.exists():
+            original_path.unlink()
+        if thumbnail_path.exists():
+            thumbnail_path.unlink()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erro ao processar imagem: {str(e)}"
+        )
+
+def delete_pet_images(pet_id: str):
+    """
+    Remove todas as imagens de um pet.
+    """
+    pet_upload_dir = UPLOAD_DIR / pet_id
+    if pet_upload_dir.exists():
+        shutil.rmtree(pet_upload_dir)
 
 # Funções para buscar raças
 def get_dog_breeds_list():
@@ -558,21 +745,37 @@ def create_or_update_user_profile(
 # Pet Endpoints
 @app.get("/pets/form")
 def pet_form_page(
-    request: Request, user: dict = Depends(get_current_user_info_from_session)
+    request: Request, 
+    user: dict = Depends(get_current_user_info_from_session),
+    error: str = Query(None),
+    pet_id: str = Query(None)
 ):
     """
     Renderiza o formulário para adicionar um novo pet.
     """
     dog_breeds = get_dog_breeds_list()
     cat_breeds = get_cat_breeds_list()
+    
+    # Busca pet para edição se pet_id for fornecido
+    pet = None
+    if pet_id:
+        try:
+            pet = pets_collection.find_one(
+                {"_id": ObjectId(pet_id), "users": user["id"], "deleted_at": None}
+            )
+        except Exception:
+            pass
 
     return templates.TemplateResponse(
         "pet_form.html",
         {
             "request": request,
-            "pet": None,
+            "pet": pet,
             "dog_breeds": dog_breeds,
             "cat_breeds": cat_breeds,
+            "error": error,
+            "supported_formats": list(ALLOWED_EXTENSIONS),
+            "heic_supported": HEIC_SUPPORT,
         },
     )
 
@@ -698,7 +901,7 @@ def pet_profile_page(
 
 
 @app.post("/pets")
-def create_or_update_pet_from_form(
+async def create_or_update_pet_from_form(
     user: dict = Depends(get_current_user_info_from_session),
     pet_id: str | None = Form(None),
     name: str = Form(...),
@@ -707,11 +910,40 @@ def create_or_update_pet_from_form(
     birth_date: str = Form(...),
     pet_type: PetType = Form(...),
     gender: Optional[Literal["male", "female"]] = Form(None),
+    photo: UploadFile = File(None),
 ):
     """
     Cria ou atualiza um pet a partir do formulário HTML.
     """
     user_id = user["id"]
+
+    # Processa imagem se fornecida
+    photo_data = None
+    if photo and photo.filename:
+        is_valid, error_message = validate_image_file(photo)
+        if not is_valid:
+            # Redireciona com mensagem de erro user-friendly
+            return RedirectResponse(
+                url=f"/pets/form?error={error_message}&pet_id={pet_id or ''}",
+                status_code=302
+            )
+        
+        # Se for atualização, remove imagem antiga
+        if pet_id:
+            old_pet = pets_collection.find_one({"_id": ObjectId(pet_id)})
+            if old_pet and "photo" in old_pet:
+                try:
+                    old_photo_path = Path(old_pet["photo"]["original"])
+                    if old_photo_path.exists():
+                        old_photo_path.unlink()
+                    old_thumb_path = Path(old_pet["photo"]["thumbnail"])
+                    if old_thumb_path.exists():
+                        old_thumb_path.unlink()
+                except Exception:
+                    pass  # Ignora erros ao remover arquivos antigos
+        
+        # Salva nova imagem
+        photo_data = save_image_with_thumbnail(photo, pet_id or "temp")
 
     pet_data = {
         "name": name,
@@ -725,6 +957,9 @@ def create_or_update_pet_from_form(
 
     if pet_id:
         # Lógica de atualização
+        if photo_data:
+            pet_data["photo"] = photo_data
+        
         result = pets_collection.update_one(
             {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
             {"$set": pet_data},
@@ -734,6 +969,23 @@ def create_or_update_pet_from_form(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pet não encontrado ou você não tem permissão para editar.",
             )
+        
+        # Move arquivo da pasta temporária para a pasta correta
+        if photo_data and photo_data.get("original"):
+            temp_path = Path(photo_data["original"])
+            if temp_path.exists():
+                final_path = UPLOAD_DIR / pet_id / temp_path.name
+                final_path.parent.mkdir(exist_ok=True)
+                shutil.move(str(temp_path), str(final_path))
+                
+                # Atualiza caminhos no banco
+                photo_data["original"] = str(final_path)
+                photo_data["thumbnail"] = str(final_path.parent / f"thumb_{temp_path.name}")
+                
+                pets_collection.update_one(
+                    {"_id": ObjectId(pet_id)},
+                    {"$set": {"photo": photo_data}}
+                )
     else:
         random_code = "".join(random.choices("0123456789", k=4))
         nickname = f"{name.split()[0].lower()}_{random_code}"
@@ -742,12 +994,33 @@ def create_or_update_pet_from_form(
         pet_data["treatments"] = []
         pet_data["deleted_at"] = None
         pet_data["nickname"] = nickname
+        
+        if photo_data:
+            pet_data["photo"] = photo_data
+        
         result = pets_collection.insert_one(pet_data)
         if not result.inserted_id:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Falha ao criar pet.",
             )
+        
+        # Move arquivo da pasta temporária para a pasta correta
+        if photo_data and photo_data.get("original"):
+            temp_path = Path(photo_data["original"])
+            if temp_path.exists():
+                final_path = UPLOAD_DIR / str(result.inserted_id) / temp_path.name
+                final_path.parent.mkdir(exist_ok=True)
+                shutil.move(str(temp_path), str(final_path))
+                
+                # Atualiza caminhos no banco
+                photo_data["original"] = str(final_path)
+                photo_data["thumbnail"] = str(final_path.parent / f"thumb_{temp_path.name}")
+                
+                pets_collection.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"photo": photo_data}}
+                )
 
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -760,16 +1033,29 @@ def delete_pet_from_form(
     Realiza o soft delete de um pet.
     """
     user_id = user["id"]
-    result = pets_collection.update_one(
-        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
-        {"$set": {"deleted_at": datetime.now()}},
+    
+    # Busca o pet para verificar se tem fotos
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
     )
-
-    if result.matched_count == 0:
+    
+    if not pet:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pet não encontrado ou você não tem permissão para excluí-lo.",
         )
+    
+    # Remove as imagens do pet
+    if pet.get("photo"):
+        try:
+            delete_pet_images(pet_id)
+        except Exception:
+            pass  # Ignora erros ao remover arquivos
+    
+    result = pets_collection.update_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
+        {"$set": {"deleted_at": datetime.now()}},
+    )
 
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
