@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
@@ -124,6 +125,19 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401:
         # Para rotas que renderizam templates, redireciona para login
         return RedirectResponse(url="/login", status_code=302)
+    elif exc.status_code == 408:
+        # Para timeouts, retorna uma página de erro amigável
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "error_code": 408,
+                "error_title": "Timeout",
+                "error_message": "A requisição demorou muito para responder. Tente novamente.",
+                "show_retry": True
+            },
+            status_code=408
+        )
     
     # Para outras exceções HTTP, retorna a resposta padrão
     return JSONResponse(
@@ -134,6 +148,21 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # Inicializa Faker e adiciona provedor de alimentos
 fake = Faker("pt_BR")
 fake.add_provider(FoodProvider)
+
+# Cache simples para evitar requisições desnecessárias ao Auth0
+user_cache = {}
+CACHE_DURATION = 300  # 5 minutos
+
+def clear_user_cache(user_id: str = None):
+    """Limpa o cache de usuários. Se user_id for fornecido, limpa apenas esse usuário."""
+    if user_id:
+        # Remove entradas que contenham o user_id
+        keys_to_remove = [key for key in user_cache.keys() if user_id in str(user_cache[key][0])]
+        for key in keys_to_remove:
+            del user_cache[key]
+    else:
+        # Limpa todo o cache
+        user_cache.clear()
 
 # Cria diretório de uploads se não existir
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -282,7 +311,7 @@ def refresh_auth_token(refresh_token: str) -> dict:
         f"https://{AUTH0_DOMAIN}/oauth/token",
         headers=headers,
         data=payload,
-        timeout=10,
+        timeout=30,  # Aumentado de 10s para 30s
     )
     response.raise_for_status()
     return response.json()
@@ -295,17 +324,36 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
     """
     access_token = request.session.get("access_token")
     refresh_token = request.session.get("refresh_token")
+    
+    # Verifica se há um flag de refresh em andamento para evitar loops
+    if request.session.get("refreshing_token"):
+        print("Token refresh already in progress, clearing session to avoid loop")
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="Authentication loop detected. Please log in again.")
 
     if not access_token:
         # Lança exceção para que o FastAPI lide com o redirecionamento
         raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
+
+    # Verifica cache primeiro
+    cache_key = f"user_{access_token[:20]}"  # Usa parte do token como chave
+    current_time = time.time()
+    
+    if cache_key in user_cache:
+        cached_data, cache_time = user_cache[cache_key]
+        if current_time - cache_time < CACHE_DURATION:
+            print("Using cached user info")
+            return cached_data
+        else:
+            # Remove cache expirado
+            del user_cache[cache_key]
 
     headers = {"Authorization": f"Bearer {access_token}"}
     try:
         response = requests.get(
             f"https://{AUTH0_DOMAIN}/userinfo",
             headers=headers,
-            timeout=10,
+            timeout=30,  # Aumentado de 10s para 30s
         )
         response.raise_for_status()
         user_info = response.json()
@@ -313,17 +361,36 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in token.")
 
-        return {"id": user_id, "info": user_info}
+        result = {"id": user_id, "info": user_info}
+        
+        # Armazena no cache
+        user_cache[cache_key] = (result, current_time)
+        
+        return result
+    except requests.exceptions.Timeout:
+        print("Auth0 UserInfo request timed out")
+        # Para timeouts, não limpa a sessão, apenas relança a exceção
+        raise HTTPException(status_code=408, detail="Request timeout. Please try again.")
     except requests.exceptions.HTTPError as http_err:
         if http_err.response.status_code == 401 and refresh_token:
             print("Access token expired, attempting to refresh...")
             try:
+                # Marca que está fazendo refresh para evitar loops
+                request.session["refreshing_token"] = True
+                
                 new_tokens = refresh_auth_token(refresh_token)
                 new_access_token = new_tokens.get("access_token")
                 new_refresh_token = new_tokens.get("refresh_token", refresh_token)
 
                 request.session["access_token"] = new_access_token
                 request.session["refresh_token"] = new_refresh_token
+                # Remove o flag de refresh
+                request.session.pop("refreshing_token", None)
+                
+                # Limpa o cache antigo
+                old_cache_key = f"user_{access_token[:20]}"
+                if old_cache_key in user_cache:
+                    del user_cache[old_cache_key]
 
                 print("Token refreshed successfully. Retrying request.")
 
@@ -332,13 +399,23 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
                 response = requests.get(
                     f"https://{AUTH0_DOMAIN}/userinfo",
                     headers=headers,
-                    timeout=10,
+                    timeout=30,  # Aumentado de 10s para 30s
                 )
                 response.raise_for_status()
                 user_info = response.json()
                 user_id = user_info.get("sub")
 
-                return {"id": user_id, "info": user_info}
+                result = {"id": user_id, "info": user_info}
+                
+                # Armazena no cache com a nova chave
+                new_cache_key = f"user_{new_access_token[:20]}"
+                user_cache[new_cache_key] = (result, current_time)
+                
+                return result
+            except requests.exceptions.Timeout:
+                print("Token refresh request timed out")
+                request.session.pop("refreshing_token", None)
+                raise HTTPException(status_code=408, detail="Token refresh timeout. Please try again.")
             except requests.exceptions.RequestException as refresh_err:
                 print(f"Token refresh failed: {refresh_err}. Forcing re-login.")
                 request.session.clear()
@@ -349,14 +426,20 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
                 )
         else:
             print(f"Auth0 UserInfo request failed with HTTP error: {http_err}")
-            # Lança exceção para que o FastAPI lide com o redirecionamento
+            # Para outros erros HTTP, limpa a sessão
+            request.session.clear()
             raise HTTPException(status_code=401, detail="Could not validate credentials")
     except requests.exceptions.RequestException as e:
         print(f"Auth0 UserInfo request failed: {e}")
         logging.error(f"Auth0 UserInfo request failed: {e}")
-
-        # Lança exceção para que o FastAPI lide com o redirecionamento
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        
+        # Para erros de rede, não limpa a sessão imediatamente
+        if "timeout" in str(e).lower():
+            raise HTTPException(status_code=408, detail="Network timeout. Please try again.")
+        else:
+            # Para outros erros de rede, limpa a sessão
+            request.session.clear()
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
 def get_current_user_info_from_header(authorization: str = Header(...)):
@@ -764,7 +847,7 @@ def callback(request: Request, code: str):
             f"https://{AUTH0_DOMAIN}/oauth/token",
             headers=headers,
             data=payload,
-            timeout=10,
+            timeout=30,  # Aumentado de 10s para 30s
         )
         response.raise_for_status()
         token_info = response.json()
@@ -789,6 +872,13 @@ def logout(request: Request):
     """
     Limpa a sessão e faz logout completo do Auth0.
     """
+    # Limpa o cache do usuário antes de limpar a sessão
+    access_token = request.session.get("access_token")
+    if access_token:
+        cache_key = f"user_{access_token[:20]}"
+        if cache_key in user_cache:
+            del user_cache[cache_key]
+    
     request.session.clear()
     
     # URL de logout do Auth0 que força o usuário a digitar credenciais novamente

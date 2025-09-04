@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ error_title }} - Pet Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .bg-sage { background-color: #5c6e5e; }
+        .text-sage { color: #5c6e5e; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+        <!-- Ícone de erro -->
+        <div class="mb-6">
+            {% if error_code == 408 %}
+                <i class="fas fa-clock text-4xl text-orange-500 mb-4"></i>
+            {% else %}
+                <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+            {% endif %}
+        </div>
+        
+        <!-- Título -->
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">{{ error_title }}</h1>
+        
+        <!-- Mensagem -->
+        <p class="text-gray-600 mb-6">{{ error_message }}</p>
+        
+        <!-- Código de erro -->
+        <div class="bg-gray-100 rounded-lg p-3 mb-6">
+            <span class="text-sm text-gray-500">Código de erro: {{ error_code }}</span>
+        </div>
+        
+        <!-- Botões de ação -->
+        <div class="space-y-3">
+            {% if show_retry %}
+                <button onclick="window.location.reload()" 
+                        class="w-full bg-sage text-white py-2 px-4 rounded-lg hover:bg-opacity-90 transition-colors duration-200">
+                    <i class="fas fa-redo mr-2"></i>Tentar Novamente
+                </button>
+            {% endif %}
+            
+            <a href="/dashboard" 
+               class="block w-full bg-terracotta text-white py-2 px-4 rounded-lg hover:bg-opacity-90 transition-colors duration-200">
+                <i class="fas fa-home mr-2"></i>Voltar ao Dashboard
+            </a>
+            
+            <a href="/login" 
+               class="block w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-200">
+                <i class="fas fa-sign-in-alt mr-2"></i>Fazer Login
+            </a>
+        </div>
+        
+        <!-- Informações adicionais -->
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <p class="text-xs text-gray-500">
+                Se o problema persistir, entre em contato com o suporte.
+            </p>
+        </div>
+    </div>
+    
+    <!-- Script para auto-refresh em caso de timeout -->
+    {% if error_code == 408 %}
+    <script>
+        // Auto-refresh após 10 segundos se o usuário não interagir
+        let autoRefreshTimer = setTimeout(() => {
+            if (confirm('Deseja tentar novamente automaticamente?')) {
+                window.location.reload();
+            }
+        }, 10000);
+        
+        // Cancela o auto-refresh se o usuário interagir
+        document.addEventListener('click', () => {
+            clearTimeout(autoRefreshTimer);
+        });
+    </script>
+    {% endif %}
+</body>
+</html>
