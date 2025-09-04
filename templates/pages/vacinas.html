@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacinas - Patas Digitais</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .bg-sage { background-color: #5c6e5e; }
+        .text-sage { color: #5c6e5e; }
+        .vaccine-card {
+            transition: all 0.3s ease;
+        }
+        .vaccine-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .badge-core {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        .badge-non-core {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .badge-obligatory {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+        .search-highlight {
+            background-color: #fef3c7;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <!-- Header -->
+    <header class="bg-sage text-white shadow-md p-4 sticky top-0 z-50">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/dashboard" class="text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                </a>
+            </div>
+            <h1 class="text-xl font-semibold">Vacinas</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm opacity-90">Guia Completo de Vacinação</span>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 flex-grow">
+        <!-- Hero Section -->
+        <div class="text-center mb-8">
+            <h2 class="text-4xl font-bold text-sage mb-4">Guia de Vacinação</h2>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Informações completas sobre vacinas essenciais e opcionais para cães e gatos. 
+                Mantenha seus pets protegidos com o calendário vacinal correto.
+            </p>
+        </div>
+
+        <!-- Filtros de Busca -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <form method="get" action="/vacinas" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <!-- Busca por texto com autocomplete -->
+                    <div class="md:col-span-2 relative">
+                        <label for="search" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-search mr-2 text-terracotta"></i>Buscar vacina
+                        </label>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                id="search" 
+                                name="search" 
+                                value="{{ search }}"
+                                placeholder="Digite o nome da vacina..." 
+                                class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-terracotta pr-10"
+                                autocomplete="off"
+                            >
+                            <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                <i class="fas fa-search text-gray-400"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- Dropdown de autocomplete -->
+                        <div id="autocomplete-dropdown" class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg hidden max-h-60 overflow-y-auto">
+                            <!-- Sugestões serão inseridas aqui via JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Filtro por espécie -->
+                    <div>
+                        <label for="especie" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-paw mr-2 text-terracotta"></i>Espécie
+                        </label>
+                        <select 
+                            id="especie" 
+                            name="especie" 
+                            class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-terracotta"
+                        >
+                            <option value="">Todas</option>
+                            {% for especie in especies %}
+                            <option value="{{ especie }}" {% if especie_filter == especie %}selected{% endif %}>
+                                {{ especie }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por tipo -->
+                    <div>
+                        <label for="tipo" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-tag mr-2 text-terracotta"></i>Tipo
+                        </label>
+                        <select 
+                            id="tipo" 
+                            name="tipo" 
+                            class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-terracotta"
+                        >
+                            <option value="">Todos</option>
+                            {% for tipo in tipos %}
+                            <option value="{{ tipo }}" {% if tipo_filter == tipo %}selected{% endif %}>
+                                {{ tipo }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-4 justify-between items-center">
+                    <button type="submit" class="bg-terracotta text-white px-6 py-3 rounded-md font-semibold hover:bg-red-600 transition-colors duration-300">
+                        <i class="fas fa-search mr-2"></i>Buscar
+                    </button>
+                    
+                    {% if search or especie_filter or tipo_filter %}
+                    <a href="/vacinas" class="text-gray-600 hover:text-gray-800 transition-colors duration-200">
+                        <i class="fas fa-times mr-2"></i>Limpar filtros
+                    </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Resultados -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-2xl font-bold text-sage">
+                    <i class="fas fa-syringe mr-3"></i>Vacinas Encontradas
+                </h3>
+                <span class="text-gray-600 bg-white px-3 py-1 rounded-full text-sm">
+                    {{ total_vacinas }} vacina{{ 's' if total_vacinas != 1 else '' }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Lista de Vacinas -->
+        {% if vacinas %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {% for vacina in vacinas %}
+            <div class="vaccine-card bg-white rounded-xl shadow-lg overflow-hidden">
+                <!-- Header do Card -->
+                <div class="p-6 border-b border-gray-100">
+                    <div class="flex items-start justify-between mb-3">
+                        <h4 class="text-xl font-bold text-sage">{{ vacina.nome_vacina }}</h4>
+                        <div class="flex flex-col items-end space-y-2">
+                            <!-- Badge de tipo -->
+                            <span class="badge-{{ 'core' if 'Essenciais' in vacina.tipo_vacina else 'non-core' }} text-xs font-medium px-2.5 py-1 rounded-full">
+                                {{ vacina.tipo_vacina.split('(')[0].strip() }}
+                            </span>
+                            
+                            <!-- Badge de obrigatoriedade -->
+                            {% if vacina.obrigatoria_por_lei %}
+                            <span class="badge-obligatory text-xs font-medium px-2.5 py-1 rounded-full">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>OBRIGATÓRIA
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center text-sm text-gray-600 mb-3">
+                        <i class="fas fa-paw mr-2 text-terracotta"></i>
+                        <span class="font-medium">{{ vacina.especie_alvo }}</span>
+                    </div>
+                    
+                    <p class="text-gray-700 leading-relaxed">{{ vacina.descricao }}</p>
+                </div>
+
+                <!-- Conteúdo do Card -->
+                <div class="p-6 space-y-4">
+                    <!-- Doenças que protege -->
+                    <div>
+                        <h5 class="font-semibold text-sage mb-2 flex items-center">
+                            <i class="fas fa-shield-alt mr-2 text-terracotta"></i>
+                            Protege contra:
+                        </h5>
+                        <div class="flex flex-wrap gap-2">
+                            {% for doenca in vacina.protege_contra %}
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
+                                {{ doenca }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Cronograma -->
+                    <div>
+                        <h5 class="font-semibold text-sage mb-2 flex items-center">
+                            <i class="fas fa-calendar-alt mr-2 text-terracotta"></i>
+                            Cronograma:
+                        </h5>
+                        <div class="space-y-2 text-sm">
+                            <div class="bg-green-50 p-3 rounded-lg">
+                                <span class="font-medium text-green-800">🐾 Filhote:</span>
+                                <p class="text-green-700 mt-1">{{ vacina.cronograma_vacinal.filhote }}</p>
+                            </div>
+                            <div class="bg-blue-50 p-3 rounded-lg">
+                                <span class="font-medium text-blue-800">🐕 Adulto:</span>
+                                <p class="text-blue-700 mt-1">{{ vacina.cronograma_vacinal.adulto }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Efeitos colaterais -->
+                    <div>
+                        <h5 class="font-semibold text-sage mb-2 flex items-center">
+                            <i class="fas fa-exclamation-triangle mr-2 text-terracotta"></i>
+                            Efeitos colaterais:
+                        </h5>
+                        <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+                            {% for efeito in vacina.efeitos_colaterais %}
+                            <li>{{ efeito }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Estado vazio -->
+        <div class="text-center py-12">
+            <div class="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
+                <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-600 mb-2">Nenhuma vacina encontrada</h3>
+                <p class="text-gray-500 mb-4">
+                    {% if search or especie_filter or tipo_filter %}
+                    Tente ajustar os filtros de busca ou usar termos diferentes.
+                    {% else %}
+                    Não há vacinas cadastradas no sistema.
+                    {% endif %}
+                </p>
+                {% if search or especie_filter or tipo_filter %}
+                <a href="/vacinas" class="bg-terracotta text-white px-6 py-3 rounded-md font-semibold hover:bg-red-600 transition-colors duration-300">
+                    <i class="fas fa-times mr-2"></i>Limpar filtros
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Informações adicionais -->
+        <div class="mt-12 bg-white rounded-xl shadow-lg p-8">
+            <h3 class="text-2xl font-bold text-sage mb-6 text-center">
+                <i class="fas fa-info-circle mr-3"></i>Informações Importantes
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="text-center">
+                    <div class="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-shield-alt text-2xl text-green-600"></i>
+                    </div>
+                    <h4 class="font-semibold text-sage mb-2">Vacinas Essenciais</h4>
+                    <p class="text-gray-600 text-sm">Proteção fundamental para a saúde do seu pet. Recomendadas para todos os animais.</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="bg-yellow-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-exclamation-triangle text-2xl text-yellow-600"></i>
+                    </div>
+                    <h4 class="font-semibold text-sage mb-2">Vacinas Obrigatórias</h4>
+                    <p class="text-gray-600 text-sm">Exigidas por lei em muitas regiões. A antirrábica é a mais comum.</p>
+                </div>
+                
+                <div class="text-center">
+                    <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-calendar-check text-2xl text-blue-600"></i>
+                    </div>
+                    <h4 class="font-semibold text-sage mb-2">Cronograma</h4>
+                    <p class="text-gray-600 text-sm">Siga sempre o cronograma recomendado pelo veterinário para máxima proteção.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-200 text-center text-gray-600 p-4 mt-8">
+        <p>&copy; 2024 Patas Digitais. Todos os direitos reservados.</p>
+    </footer>
+
+    <script>
+        // Funcionalidade de autocomplete e busca controlada
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search');
+            const especieSelect = document.getElementById('especie');
+            const tipoSelect = document.getElementById('tipo');
+            const autocompleteDropdown = document.getElementById('autocomplete-dropdown');
+            const searchForm = document.querySelector('form');
+            
+            let autocompleteTimeout;
+            let selectedIndex = -1;
+            let suggestions = [];
+            
+            // Auto-submit quando os filtros mudarem (apenas espécie e tipo)
+            [especieSelect, tipoSelect].forEach(select => {
+                select.addEventListener('change', function() {
+                    searchForm.submit();
+                });
+            });
+            
+            // Autocomplete ao digitar
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                
+                // Limpa timeout anterior
+                clearTimeout(autocompleteTimeout);
+                
+                // Esconde dropdown se não há texto
+                if (query.length < 1) {
+                    hideAutocomplete();
+                    return;
+                }
+                
+                // Debounce para autocomplete (300ms)
+                autocompleteTimeout = setTimeout(() => {
+                    fetchAutocomplete(query);
+                }, 300);
+            });
+            
+            // Busca apenas ao pressionar Enter ou clicar no botão
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    hideAutocomplete();
+                    searchForm.submit();
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    navigateAutocomplete(1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    navigateAutocomplete(-1);
+                } else if (e.key === 'Escape') {
+                    hideAutocomplete();
+                }
+            });
+            
+            // Esconde autocomplete ao clicar fora
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !autocompleteDropdown.contains(e.target)) {
+                    hideAutocomplete();
+                }
+            });
+            
+            // Função para buscar sugestões
+            async function fetchAutocomplete(query) {
+                try {
+                    const response = await fetch(`/api/vacinas/autocomplete?q=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+                    
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        showAutocomplete(data.suggestions);
+                    } else {
+                        hideAutocomplete();
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar autocomplete:', error);
+                    hideAutocomplete();
+                }
+            }
+            
+            // Função para mostrar autocomplete
+            function showAutocomplete(suggestionsList) {
+                suggestions = suggestionsList;
+                selectedIndex = -1;
+                
+                autocompleteDropdown.innerHTML = '';
+                
+                suggestionsList.forEach((suggestion, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'px-4 py-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0';
+                    item.innerHTML = `
+                        <div class="font-medium text-gray-900">${suggestion.nome}</div>
+                        <div class="text-sm text-gray-600">${suggestion.especie} • ${suggestion.tipo}</div>
+                    `;
+                    
+                    item.addEventListener('click', () => {
+                        selectSuggestion(suggestion);
+                    });
+                    
+                    item.addEventListener('mouseenter', () => {
+                        selectedIndex = index;
+                        updateSelectedItem();
+                    });
+                    
+                    autocompleteDropdown.appendChild(item);
+                });
+                
+                autocompleteDropdown.classList.remove('hidden');
+            }
+            
+            // Função para esconder autocomplete
+            function hideAutocomplete() {
+                autocompleteDropdown.classList.add('hidden');
+                suggestions = [];
+                selectedIndex = -1;
+            }
+            
+            // Função para selecionar sugestão
+            function selectSuggestion(suggestion) {
+                searchInput.value = suggestion.nome;
+                hideAutocomplete();
+                // Não submete automaticamente - usuário deve clicar em buscar ou pressionar Enter
+            }
+            
+            // Função para navegar no autocomplete com teclado
+            function navigateAutocomplete(direction) {
+                if (suggestions.length === 0) return;
+                
+                selectedIndex += direction;
+                
+                if (selectedIndex < 0) selectedIndex = suggestions.length - 1;
+                if (selectedIndex >= suggestions.length) selectedIndex = 0;
+                
+                updateSelectedItem();
+            }
+            
+            // Função para atualizar item selecionado
+            function updateSelectedItem() {
+                const items = autocompleteDropdown.querySelectorAll('div');
+                items.forEach((item, index) => {
+                    if (index === selectedIndex) {
+                        item.classList.add('bg-gray-100');
+                    } else {
+                        item.classList.remove('bg-gray-100');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

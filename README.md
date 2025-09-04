@@ -7,7 +7,7 @@ Sistema completo para gerenciamento de pets com autenticação Auth0, banco de d
 - ✅ Autenticação segura com Auth0
 - ✅ Cadastro e gerenciamento de pets
 - ✅ Upload de fotos com validação e crop
-- ✅ Suporte a múltiplos formatos (JPG, PNG, GIF, WebP, HEIC)
+- ✅ Suporte a múltiplos formatos (JPG, PNG, GIF, WebP)
 - ✅ Criação automática de miniaturas
 - ✅ Interface de crop intuitiva
 - ✅ Dashboard responsivo com fotos
@@ -34,9 +34,6 @@ source .venv/bin/activate  # Linux/Mac
 ```bash
 # Usando UV (recomendado)
 uv sync
-
-# Para suporte a HEIC (opcional)
-uv add pillow-heif
 
 # Ou usando pip
 pip install -r requirements.txt
@@ -71,15 +68,6 @@ source .venv/bin/activate
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 6. Teste o suporte a HEIC
-```bash
-# Execute o script de teste
-uv run python test_heic.py
-
-# Ou teste manualmente
-uv run python -c "from main import HEIC_SUPPORT; print(f'HEIC suportado: {HEIC_SUPPORT}')"
-```
-
 ## Funcionalidade de Upload de Fotos
 
 ### Características de Segurança
@@ -89,7 +77,6 @@ uv run python -c "from main import HEIC_SUPPORT; print(f'HEIC suportado: {HEIC_S
 - ✅ Interface de crop intuitiva
 - ✅ Armazenamento seguro em diretórios separados por pet
 - ✅ Limpeza automática de arquivos antigos
-- ✅ Suporte nativo a HEIC com pillow-heif
 - ✅ Fallback para conversão quando necessário
 
 ### Como Usar
@@ -97,7 +84,7 @@ uv run python -c "from main import HEIC_SUPPORT; print(f'HEIC suportado: {HEIC_S
 2. **Crop da Imagem**: Use a interface de crop para ajustar a foto antes do upload
 3. **Edição de Pet**: Acesse `/pets/{id}/edit` para atualizar a foto
 4. **Visualização**: As fotos aparecem no dashboard e perfil do pet
-5. **Formatos Suportados**: JPG, PNG, GIF, WebP e HEIC (convertido automaticamente)
+5. **Formatos Suportados**: JPG, PNG, GIFe WebP
 
 ### Estrutura de Arquivos
 ```
@@ -134,24 +121,6 @@ uploads/
 - **Frontend**: HTML + Tailwind CSS + JavaScript
 - **Upload de Arquivos**: FastAPI UploadFile
 
-## Suporte a HEIC
-
-### Instalação
-Para suporte completo a arquivos HEIC, instale a dependência adicional:
-
-```bash
-# Usando UV
-uv add pillow-heif
-
-# Ou usando pip
-pip install pillow-heif
-```
-
-### Funcionamento
-- **Com pillow-heif**: Suporte nativo completo a HEIC/HEIF
-- **Sem pillow-heif**: Fallback para conversão automática
-- **Conversão**: HEIC é convertido para JPEG de alta qualidade
-- **Validação**: Verificação automática de suporte disponível
 
 ## Segurança
 

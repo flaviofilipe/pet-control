@@ -34,14 +34,6 @@ from pathlib import Path
 from PIL import Image
 import io
 
-# Importa suporte a HEIC
-try:
-    import pillow_heif
-    pillow_heif.register_heif_opener()
-    HEIC_SUPPORT = True
-except ImportError:
-    HEIC_SUPPORT = False
-    print("Warning: pillow-heif não instalado. Arquivos HEIC não serão suportados.")
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -67,15 +59,15 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
 DB_NAME = "pet_control"
 COLLECTION_NAME = "profiles"
 PETS_COLLECTION_NAME = "pets"
+VACCINES_COLLECTION_NAME = "vacinas"
 
 # File upload configuration
 UPLOAD_DIR = Path("uploads")
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB (aumentado para HEIC)
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Extensões permitidas baseadas no suporte disponível
 BASE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-HEIC_EXTENSIONS = {".heic", ".heif"} if HEIC_SUPPORT else set()
-ALLOWED_EXTENSIONS = BASE_EXTENSIONS | HEIC_EXTENSIONS
+ALLOWED_EXTENSIONS = BASE_EXTENSIONS
 
 THUMBNAIL_SIZE = (300, 300)
 
@@ -85,6 +77,7 @@ try:
     db = client[DB_NAME]
     profiles_collection = db[COLLECTION_NAME]
     pets_collection = db[PETS_COLLECTION_NAME]
+    vaccines_collection = db[VACCINES_COLLECTION_NAME]
     client.admin.command("ismaster")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
@@ -158,9 +151,9 @@ def validate_image_file(file: UploadFile) -> tuple[bool, str]:
     if file_ext not in ALLOWED_EXTENSIONS:
         return False, f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS).upper()}"
     
-    # Verifica se HEIC é suportado
-    if file_ext in ['.heic', '.heif'] and not HEIC_SUPPORT:
-        return False, "Arquivos HEIC não são suportados. Instale pillow-heif ou use outro formato."
+    # Verifica se é um arquivo HEIC (não suportado)
+    if file_ext in ['.heic', '.heif']:
+        return False, "Arquivos HEIC não são suportados. Use JPG, PNG, GIF ou WebP."
     
     # Verifica tamanho
     if file.size and file.size > MAX_FILE_SIZE:
@@ -172,7 +165,6 @@ def validate_image_file(file: UploadFile) -> tuple[bool, str]:
 def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
     """
     Salva a imagem original e cria uma miniatura.
-    Suporta HEIC/HEIF e outros formatos.
     Retorna um dicionário com os caminhos dos arquivos.
     """
     # Gera nome único para o arquivo
@@ -197,73 +189,11 @@ def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
         
         # Processa a imagem
         try:
-            # Para arquivos HEIC, sempre converte para JPEG
-            if file_ext in ['.heic', '.heif']:
-                if HEIC_SUPPORT:
-                    # Usa pillow-heif para ler o arquivo
-                    heif_file = pillow_heif.read_heif(io.BytesIO(contents))
-                    image = Image.frombytes(
-                        heif_file.mode, 
-                        heif_file.size, 
-                        heif_file.data
-                    )
-                else:
-                    # Tenta abrir com PIL (pode falhar)
-                    image = Image.open(io.BytesIO(contents))
-                
-                # Converte para JPEG
-                jpeg_filename = f"{pet_id}_{uuid.uuid4().hex}.jpg"
-                jpeg_path = pet_upload_dir / jpeg_filename
-                
-                # Converte para RGB se necessário
-                if image.mode in ('RGBA', 'LA', 'P'):
-                    image = image.convert('RGB')
-                
-                # Salva como JPEG
-                image.save(jpeg_path, "JPEG", quality=95)
-                
-                # Atualiza caminhos
-                original_path = jpeg_path
-                unique_filename = jpeg_filename
-                
-            else:
-                # Para outros formatos, abre normalmente com PIL
-                image = Image.open(io.BytesIO(contents))
+            # Abre a imagem com PIL
+            image = Image.open(io.BytesIO(contents))
                     
         except Exception as e:
-            # Se falhar ao abrir, tenta métodos alternativos
-            if file_ext in ['.heic', '.heif']:
-                try:
-                    # Tenta usar pillow-heif diretamente
-                    if HEIC_SUPPORT:
-                        heif_file = pillow_heif.read_heif(io.BytesIO(contents))
-                        image = Image.frombytes(
-                            heif_file.mode, 
-                            heif_file.size, 
-                            heif_file.data
-                        )
-                        
-                        # Converte para JPEG
-                        jpeg_filename = f"{pet_id}_{uuid.uuid4().hex}.jpg"
-                        jpeg_path = pet_upload_dir / jpeg_filename
-                        
-                        # Converte para RGB se necessário
-                        if image.mode in ('RGBA', 'LA', 'P'):
-                            image = image.convert('RGB')
-                        
-                        # Salva como JPEG
-                        image.save(jpeg_path, "JPEG", quality=95)
-                        
-                        # Atualiza caminhos
-                        original_path = jpeg_path
-                        unique_filename = jpeg_filename
-                        
-                    else:
-                        raise Exception("Arquivo HEIC não pode ser processado. Instale pillow-heif.")
-                except Exception as heic_error:
-                    raise Exception(f"Erro ao processar arquivo HEIC: {str(heic_error)}")
-            else:
-                raise Exception(f"Formato de imagem não suportado: {str(e)}")
+            raise Exception(f"Formato de imagem não suportado: {str(e)}")
         
         # Converte para RGB se necessário
         if image.mode in ('RGBA', 'LA', 'P'):
@@ -581,7 +511,105 @@ def get_dashboard_page(
         )
     except HTTPException as e:
         print(f"Error fetching dashboard data: {e}")
-       
+
+
+@app.get("/vacinas")
+def get_vaccines_page(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    search: Optional[str] = None,
+    especie: Optional[str] = None,
+    tipo: Optional[str] = None,
+):
+    """
+    Renderiza a página de vacinas com informações detalhadas sobre cada tipo.
+    """
+    try:
+        # Filtros de busca
+        filter_query = {}
+        
+        if search:
+            filter_query["$or"] = [
+                {"nome_vacina": {"$regex": search, "$options": "i"}},
+                {"descricao": {"$regex": search, "$options": "i"}},
+                {"protege_contra": {"$regex": search, "$options": "i"}}
+            ]
+        
+        if especie:
+            filter_query["especie_alvo"] = especie
+        
+        if tipo:
+            filter_query["tipo_vacina"] = tipo
+        
+        # Busca vacinas com filtros
+        vacinas = list(vaccines_collection.find(filter_query).sort("nome_vacina", 1))
+        
+        # Converte ObjectId para string
+        for vacina in vacinas:
+            vacina["_id"] = str(vacina["_id"])
+        
+        # Busca opções para filtros
+        especies = list(vaccines_collection.distinct("especie_alvo"))
+        tipos = list(vaccines_collection.distinct("tipo_vacina"))
+        
+        return templates.TemplateResponse(
+            "pages/vacinas.html",
+            {
+                "request": request,
+                "user": user,
+                "vacinas": vacinas,
+                "especies": especies,
+                "tipos": tipos,
+                "search": search or "",
+                "especie_filter": especie or "",
+                "tipo_filter": tipo or "",
+                "total_vacinas": len(vacinas)
+            },
+        )
+        
+    except Exception as e:
+        print(f"Error fetching vaccines data: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao carregar dados das vacinas")
+
+
+@app.get("/api/vacinas/autocomplete")
+def get_vaccines_autocomplete(
+    q: str = Query(..., min_length=1, description="Termo de busca"),
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    """
+    Endpoint para autocomplete de vacinas.
+    Retorna sugestões baseadas no nome da vacina.
+    """
+    try:
+        if len(q) < 1:
+            return {"suggestions": []}
+        
+        # Busca vacinas que começam com o termo digitado
+        filter_query = {
+            "nome_vacina": {"$regex": f"^{q}", "$options": "i"}
+        }
+        
+        # Busca até 10 sugestões
+        vacinas = list(vaccines_collection.find(filter_query)
+                      .limit(10)
+                      .sort("nome_vacina", 1))
+        
+        suggestions = []
+        for vacina in vacinas:
+            suggestions.append({
+                "id": str(vacina["_id"]),
+                "nome": vacina["nome_vacina"],
+                "especie": vacina["especie_alvo"],
+                "tipo": vacina["tipo_vacina"]
+            })
+        
+        return {"suggestions": suggestions}
+        
+    except Exception as e:
+        print(f"Error in vaccines autocomplete: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
+
 
 @app.get("/callback")
 def callback(request: Request, code: str):
@@ -775,7 +803,6 @@ def pet_form_page(
             "cat_breeds": cat_breeds,
             "error": error,
             "supported_formats": list(ALLOWED_EXTENSIONS),
-            "heic_supported": HEIC_SUPPORT,
         },
     )
 
