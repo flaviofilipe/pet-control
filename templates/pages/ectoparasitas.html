@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ectoparasitas - Pet Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .bg-sage { background-color: #5c6e5e; }
+        .text-sage { color: #5c6e5e; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-sage text-white shadow-md p-4 sticky top-0 z-50">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/dashboard" class="text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                </a>
+            </div>
+            <h1 class="text-xl font-semibold">Ectoparasitas</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm opacity-90">Guia Completo de Ectoparasitas</span>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Hero Section -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-bug text-terracotta mr-3"></i>
+                Ectoparasitas
+            </h1>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Informações completas sobre ectoparasitas que afetam cães e gatos, 
+                incluindo sintomas, tratamentos e medicamentos recomendados.
+            </p>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-filter text-sage mr-2"></i>Filtros de Busca
+            </h2>
+            
+            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Busca por texto com autocomplete -->
+                <div class="md:col-span-2 relative">
+                    <label for="search" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-search mr-2 text-terracotta"></i>Buscar ectoparasita
+                    </label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="search" 
+                            name="search" 
+                            value="{{ search }}"
+                            placeholder="Busque por nome, doença, sintoma, princípio ativo..." 
+                            class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-terracotta pr-10"
+                            autocomplete="off"
+                        >
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Dropdown de autocomplete -->
+                    <div id="autocomplete-dropdown" class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg hidden max-h-60 overflow-y-auto">
+                        <!-- Sugestões serão inseridas aqui via JavaScript -->
+                    </div>
+                    
+                    <!-- Dica sobre campos pesquisáveis -->
+                    <div class="mt-2 text-xs text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Busque por: nome do ectoparasita, doenças transmitidas, sintomas, princípios ativos ou descrições
+                    </div>
+                </div>
+
+                <!-- Filtro por espécie -->
+                <div>
+                    <label for="especie" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-paw mr-2 text-sage"></i>Espécie
+                    </label>
+                    <select id="especie" name="especie" class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-sage">
+                        <option value="">Todas as espécies</option>
+                        {% for especie in especies %}
+                        <option value="{{ especie }}" {% if especie_filter == especie %}selected{% endif %}>{{ especie }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Filtro por tipo -->
+                <div>
+                    <label for="tipo" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-tag mr-2 text-sage"></i>Tipo
+                    </label>
+                    <select id="tipo" name="tipo" class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-sage">
+                        <option value="">Todos os tipos</option>
+                        {% for tipo in tipos %}
+                        <option value="{{ tipo }}" {% if tipo_filter == tipo %}selected{% endif %}>{{ tipo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Botão de busca -->
+                <div class="md:col-span-4 flex justify-center">
+                    <button type="submit" class="bg-terracotta text-white px-8 py-3 rounded-md font-semibold hover:bg-red-600 transition-colors duration-200">
+                        <i class="fas fa-search mr-2"></i>Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Resultados -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-2xl font-bold text-gray-900">
+                    <i class="fas fa-list text-sage mr-2"></i>
+                    Resultados ({{ total_ectoparasitas }})
+                </h2>
+            </div>
+        </div>
+
+        <!-- Lista de Ectoparasitas -->
+        {% if ectoparasitas %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {% for ectoparasita in ectoparasitas %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
+                <!-- Header do Card -->
+                <div class="bg-gradient-to-r from-sage to-green-600 px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-bold">
+                            <i class="fas fa-bug mr-2"></i>{{ ectoparasita.nome_praga }}
+                        </h3>
+                        <span class="bg-white bg-opacity-25 px-3 py-1 rounded-full text-sm font-medium shadow-sm">
+                            {{ ectoparasita.tipo_praga }}
+                        </span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm font-medium">
+                            <i class="fas fa-paw mr-1"></i>
+                            {% for especie in ectoparasita.especies_alvo %}
+                                {{ especie }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Conteúdo do Card -->
+                <div class="p-6">
+                    <!-- Doenças Transmitidas -->
+                    {% if ectoparasita.transmissor_de_doencas and ectoparasita.transmissor_de_doencas[0] != "Nenhuma" %}
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>Doenças Transmitidas
+                        </h4>
+                        <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+                            {% for doenca in ectoparasita.transmissor_de_doencas %}
+                            <li>{{ doenca }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <!-- Sintomas -->
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-heartbeat text-orange-600 mr-2"></i>Sintomas no Animal
+                        </h4>
+                        <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+                            {% for sintoma in ectoparasita.sintomas_no_animal %}
+                            <li>{{ sintoma }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <!-- Medicamentos -->
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-pills text-green-600 mr-2"></i>Medicamentos de Combate
+                        </h4>
+                        <div class="space-y-3">
+                            {% for medicamento in ectoparasita.medicamentos_de_combate %}
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h5 class="font-medium text-gray-900">{{ medicamento.tipo }}</h5>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-2">{{ medicamento.descricao }}</p>
+                                
+                                <div class="mb-2">
+                                    <span class="text-xs font-medium text-gray-600">Princípios Ativos:</span>
+                                    <div class="flex flex-wrap gap-1 mt-1">
+                                        {% for principio in medicamento.principios_ativos %}
+                                        <span class="bg-blue-100 text-blue-900 text-xs px-2 py-1 rounded font-medium">{{ principio }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                
+                                <div class="text-xs text-gray-600">
+                                    <span class="font-medium">Frequência:</span> {{ medicamento.frequencia_recomendada }}
+                                </div>
+                                
+                                {% if medicamento.efeitos_colaterais %}
+                                <div class="text-xs text-orange-600 mt-1">
+                                    <span class="font-medium">Efeitos Colaterais:</span> {{ medicamento.efeitos_colaterais | join(', ') }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Observações -->
+                    {% if ectoparasita.observacoes_adicionais %}
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <h4 class="font-semibold text-amber-900 mb-1">
+                            <i class="fas fa-info-circle mr-2"></i>Observações Importantes
+                        </h4>
+                        <p class="text-sm text-amber-800">{{ ectoparasita.observacoes_adicionais }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Estado Vazio -->
+        <div class="text-center py-12">
+            <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <i class="fas fa-search text-gray-400 text-3xl"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum ectoparasita encontrado</h3>
+            <p class="text-gray-600 mb-6">
+                {% if search or especie_filter or tipo_filter %}
+                    Tente ajustar os filtros de busca para encontrar o que procura.
+                {% else %}
+                    Não há ectoparasitas cadastrados no sistema.
+                {% endif %}
+            </p>
+            {% if search or especie_filter or tipo_filter %}
+            <a href="/ectoparasitas" class="bg-terracotta text-white px-6 py-2 rounded-md font-medium hover:bg-red-600 transition-colors duration-200">
+                <i class="fas fa-refresh mr-2"></i>Limpar Filtros
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="text-center text-gray-600 text-sm">
+                <p>&copy; 2024 Pet Control. Informações sobre ectoparasitas para cães e gatos.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Funcionalidade de autocomplete e busca controlada
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search');
+            const especieSelect = document.getElementById('especie');
+            const tipoSelect = document.getElementById('tipo');
+            const autocompleteDropdown = document.getElementById('autocomplete-dropdown');
+            const searchForm = document.querySelector('form');
+            
+            let autocompleteTimeout;
+            let selectedIndex = -1;
+            let suggestions = [];
+            
+            // Auto-submit quando os filtros mudarem (apenas espécie e tipo)
+            [especieSelect, tipoSelect].forEach(select => {
+                select.addEventListener('change', function() {
+                    searchForm.submit();
+                });
+            });
+            
+            // Autocomplete ao digitar
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                
+                // Limpa timeout anterior
+                clearTimeout(autocompleteTimeout);
+                
+                // Esconde dropdown se não há texto
+                if (query.length < 1) {
+                    hideAutocomplete();
+                    return;
+                }
+                
+                // Debounce para autocomplete (300ms)
+                autocompleteTimeout = setTimeout(() => {
+                    fetchAutocomplete(query);
+                }, 300);
+            });
+            
+            // Busca apenas ao pressionar Enter ou clicar no botão
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    hideAutocomplete();
+                    searchForm.submit();
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    navigateAutocomplete(1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    navigateAutocomplete(-1);
+                } else if (e.key === 'Escape') {
+                    hideAutocomplete();
+                }
+            });
+            
+            // Esconde autocomplete ao clicar fora
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !autocompleteDropdown.contains(e.target)) {
+                    hideAutocomplete();
+                }
+            });
+            
+            // Função para buscar sugestões
+            async function fetchAutocomplete(query) {
+                try {
+                    const response = await fetch(`/api/ectoparasitas/autocomplete?q=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+                    
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        showAutocomplete(data.suggestions);
+                    } else {
+                        hideAutocomplete();
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar autocomplete:', error);
+                    hideAutocomplete();
+                }
+            }
+            
+            // Função para mostrar autocomplete
+            function showAutocomplete(suggestionsList) {
+                suggestions = suggestionsList;
+                selectedIndex = -1;
+                
+                autocompleteDropdown.innerHTML = '';
+                
+                suggestionsList.forEach((suggestion, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'px-4 py-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0';
+                    item.innerHTML = `
+                        <div class="font-medium text-gray-900">${suggestion.nome}</div>
+                        <div class="text-sm text-gray-600">
+                            ${suggestion.especies} • ${suggestion.tipo}
+                            ${suggestion.contexto ? `<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${suggestion.contexto}</span>` : ''}
+                        </div>
+                    `;
+                    
+                    item.addEventListener('click', () => {
+                        selectSuggestion(suggestion);
+                    });
+                    
+                    item.addEventListener('mouseenter', () => {
+                        selectedIndex = index;
+                        updateSelectedItem();
+                    });
+                    
+                    autocompleteDropdown.appendChild(item);
+                });
+                
+                autocompleteDropdown.classList.remove('hidden');
+            }
+            
+            // Função para esconder autocomplete
+            function hideAutocomplete() {
+                autocompleteDropdown.classList.add('hidden');
+                suggestions = [];
+                selectedIndex = -1;
+            }
+            
+            // Função para selecionar sugestão
+            function selectSuggestion(suggestion) {
+                searchInput.value = suggestion.nome;
+                hideAutocomplete();
+                // Não submete automaticamente - usuário deve clicar em buscar ou pressionar Enter
+            }
+            
+            // Função para navegar no autocomplete com teclado
+            function navigateAutocomplete(direction) {
+                if (suggestions.length === 0) return;
+                
+                selectedIndex += direction;
+                
+                if (selectedIndex < 0) selectedIndex = suggestions.length - 1;
+                if (selectedIndex >= suggestions.length) selectedIndex = 0;
+                
+                updateSelectedItem();
+            }
+            
+            // Função para atualizar item selecionado
+            function updateSelectedItem() {
+                const items = autocompleteDropdown.querySelectorAll('div');
+                items.forEach((item, index) => {
+                    if (index === selectedIndex) {
+                        item.classList.add('bg-gray-100');
+                    } else {
+                        item.classList.remove('bg-gray-100');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -60,6 +60,7 @@ DB_NAME = "pet_control"
 COLLECTION_NAME = "profiles"
 PETS_COLLECTION_NAME = "pets"
 VACCINES_COLLECTION_NAME = "vacinas"
+ECTOPARASITES_COLLECTION_NAME = "ectoparasitas"
 
 # File upload configuration
 UPLOAD_DIR = Path("uploads")
@@ -78,6 +79,7 @@ try:
     profiles_collection = db[COLLECTION_NAME]
     pets_collection = db[PETS_COLLECTION_NAME]
     vaccines_collection = db[VACCINES_COLLECTION_NAME]
+    ectoparasites_collection = db[ECTOPARASITES_COLLECTION_NAME]
     client.admin.command("ismaster")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
@@ -572,6 +574,77 @@ def get_vaccines_page(
         raise HTTPException(status_code=500, detail="Erro ao carregar dados das vacinas")
 
 
+@app.get("/ectoparasitas")
+def get_ectoparasites_page(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    search: Optional[str] = None,
+    especie: Optional[str] = None,
+    tipo: Optional[str] = None,
+):
+    """
+    Renderiza a página de ectoparasitas com informações detalhadas sobre cada tipo.
+    """
+    try:
+        # Filtros de busca
+        filter_query = {}
+        
+        if search:
+            filter_query["$or"] = [
+                {"nome_praga": {"$regex": search, "$options": "i"}},
+                {"transmissor_de_doencas": {"$regex": search, "$options": "i"}},
+                {"sintomas_no_animal": {"$regex": search, "$options": "i"}},
+                {"medicamentos_de_combate.descricao": {"$regex": search, "$options": "i"}},
+                {"medicamentos_de_combate.principios_ativos": {"$regex": search, "$options": "i"}},
+                {"observacoes_adicionais": {"$regex": search, "$options": "i"}}
+            ]
+        
+        if especie:
+            filter_query["especies_alvo"] = especie
+        
+        if tipo:
+            filter_query["tipo_praga"] = tipo
+        
+        # Busca ectoparasitas com filtros
+        ectoparasitas = list(ectoparasites_collection.find(filter_query).sort("nome_praga", 1))
+        
+        # Converte ObjectId para string
+        for ectoparasita in ectoparasitas:
+            ectoparasita["_id"] = str(ectoparasita["_id"])
+        
+        # Busca opções para filtros
+        especies = list(ectoparasites_collection.distinct("especies_alvo"))
+        # Flatten da lista de listas
+        especies_flat = []
+        for especie_list in especies:
+            if isinstance(especie_list, list):
+                especies_flat.extend(especie_list)
+            else:
+                especies_flat.append(especie_list)
+        especies = list(set(especies_flat))  # Remove duplicatas
+        
+        tipos = list(ectoparasites_collection.distinct("tipo_praga"))
+        
+        return templates.TemplateResponse(
+            "pages/ectoparasitas.html",
+            {
+                "request": request,
+                "user": user,
+                "ectoparasitas": ectoparasitas,
+                "especies": especies,
+                "tipos": tipos,
+                "search": search or "",
+                "especie_filter": especie or "",
+                "tipo_filter": tipo or "",
+                "total_ectoparasitas": len(ectoparasitas)
+            },
+        )
+        
+    except Exception as e:
+        print(f"Error fetching ectoparasites data: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao carregar dados dos ectoparasitas")
+
+
 @app.get("/api/vacinas/autocomplete")
 def get_vaccines_autocomplete(
     q: str = Query(..., min_length=1, description="Termo de busca"),
@@ -608,6 +681,65 @@ def get_vaccines_autocomplete(
         
     except Exception as e:
         print(f"Error in vaccines autocomplete: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
+
+
+@app.get("/api/ectoparasitas/autocomplete")
+def get_ectoparasites_autocomplete(
+    q: str = Query(..., min_length=1, description="Termo de busca"),
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    """
+    Endpoint para autocomplete de ectoparasitas.
+    Retorna sugestões baseadas no nome da praga.
+    """
+    try:
+        if len(q) < 1:
+            return {"suggestions": []}
+        
+        # Busca ectoparasitas que começam com o termo digitado ou contêm o termo
+        filter_query = {
+            "$or": [
+                {"nome_praga": {"$regex": f"^{q}", "$options": "i"}},
+                {"nome_praga": {"$regex": q, "$options": "i"}},
+                {"transmissor_de_doencas": {"$regex": q, "$options": "i"}},
+                {"sintomas_no_animal": {"$regex": q, "$options": "i"}},
+                {"medicamentos_de_combate.principios_ativos": {"$regex": q, "$options": "i"}}
+            ]
+        }
+        
+        # Busca até 10 sugestões
+        ectoparasitas = list(ectoparasites_collection.find(filter_query)
+                           .limit(10)
+                           .sort("nome_praga", 1))
+        
+        suggestions = []
+        for ectoparasita in ectoparasitas:
+            especies = ", ".join(ectoparasita["especies_alvo"])
+            
+            # Determina onde o termo foi encontrado para mostrar contexto
+            match_context = ""
+            if q.lower() in ectoparasita["nome_praga"].lower():
+                match_context = "Nome"
+            elif any(q.lower() in doenca.lower() for doenca in ectoparasita.get("transmissor_de_doencas", [])):
+                match_context = "Doença"
+            elif any(q.lower() in sintoma.lower() for sintoma in ectoparasita.get("sintomas_no_animal", [])):
+                match_context = "Sintoma"
+            elif any(q.lower() in principio.lower() for medicamento in ectoparasita.get("medicamentos_de_combate", []) for principio in medicamento.get("principios_ativos", [])):
+                match_context = "Princípio Ativo"
+            
+            suggestions.append({
+                "id": str(ectoparasita["_id"]),
+                "nome": ectoparasita["nome_praga"],
+                "especies": especies,
+                "tipo": ectoparasita["tipo_praga"],
+                "contexto": match_context
+            })
+        
+        return {"suggestions": suggestions}
+        
+    except Exception as e:
+        print(f"Error in ectoparasites autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
 
 
