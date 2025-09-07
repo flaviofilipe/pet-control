@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vermífugos - Pet Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .bg-sage { background-color: #5c6e5e; }
+        .text-sage { color: #5c6e5e; }
+        .bg-purple { background-color: #9c27b0; }
+        .text-purple { color: #9c27b0; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-purple text-white shadow-md p-4 sticky top-0 z-50">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/dashboard" class="text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Dashboard
+                </a>
+            </div>
+            <h1 class="text-xl font-semibold">Vermífugos</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm opacity-90">Guia Completo de Vermífugos</span>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Hero Section -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-pills text-purple mr-3"></i>
+                Vermífugos
+            </h1>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Informações completas sobre vermifugação de cães e gatos, 
+                incluindo tipos de vermes, sintomas, medicamentos e frequência de aplicação.
+            </p>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-filter text-sage mr-2"></i>Filtros de Busca
+            </h2>
+            
+            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Busca por texto com autocomplete -->
+                <div class="md:col-span-2 relative">
+                    <label for="search" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-search mr-2 text-purple"></i>Buscar vermífugo
+                    </label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="search" 
+                            name="search" 
+                            value="{{ search }}"
+                            placeholder="Busque por nome, sintoma, princípio ativo..." 
+                            class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple pr-10"
+                            autocomplete="off"
+                        >
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Dropdown de autocomplete -->
+                    <div id="autocomplete-dropdown" class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg hidden max-h-60 overflow-y-auto">
+                        <!-- Sugestões serão inseridas aqui via JavaScript -->
+                    </div>
+                    
+                    <!-- Dica sobre campos pesquisáveis -->
+                    <div class="mt-2 text-xs text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Busque por: tipo de verme, sintomas, princípios ativos ou observações
+                    </div>
+                </div>
+
+                <!-- Filtro por espécie -->
+                <div>
+                    <label for="especie" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-paw mr-2 text-sage"></i>Espécie
+                    </label>
+                    <select id="especie" name="especie" class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-sage">
+                        <option value="">Todas as espécies</option>
+                        {% for especie in especies %}
+                        <option value="{{ especie }}" {% if especie_filter == especie %}selected{% endif %}>
+                            {{ especie }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Filtro por tipo -->
+                <div>
+                    <label for="tipo" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-tag mr-2 text-terracotta"></i>Tipo
+                    </label>
+                    <select id="tipo" name="tipo" class="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-terracotta">
+                        <option value="">Todos os tipos</option>
+                        {% for tipo in tipos %}
+                        <option value="{{ tipo }}" {% if tipo_filter == tipo %}selected{% endif %}>
+                            {{ tipo }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-purple text-white py-3 px-6 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple focus:ring-offset-2 transition-all duration-200 font-medium">
+                        <i class="fas fa-search mr-2"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Resultados -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-900">
+                    <i class="fas fa-list mr-2 text-purple"></i>
+                    Resultados da Busca
+                </h2>
+                <div class="text-sm text-gray-600">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    {{ total_vermifugos }} vermífugo(s) encontrado(s)
+                </div>
+            </div>
+
+        {% if vermifugos %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {% for vermifugo in vermifugos %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200">
+                <!-- Header do Card -->
+                <div class="bg-gradient-to-r from-purple to-purple-600 px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-bold text-white">
+                            <i class="fas fa-pills mr-2"></i>{{ vermifugo.nome_praga }}
+                        </h3>
+                        <span class="bg-white bg-opacity-25 px-3 py-1 rounded-full text-sm font-medium shadow-sm text-white">
+                            {{ vermifugo.tipo_praga }}
+                        </span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm font-medium text-white">
+                            <i class="fas fa-paw mr-1"></i>
+                            {% for especie in vermifugo.especies_alvo %}
+                                {{ especie }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Conteúdo do Card -->
+                <div class="p-6">
+                    
+                    <!-- Parasitas Alvos -->
+                    {% if vermifugo.parasitas_alvo %}
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                            <i class="fas fa-crosshairs mr-2 text-purple"></i>
+                            Parasitas Alvos
+                        </h4>
+                        <div class="grid grid-cols-1 gap-2">
+                            {% for parasita in vermifugo.parasitas_alvo %}
+                            <div class="flex items-center text-sm text-gray-700 bg-gray-50 rounded-md px-3 py-2">
+                                <i class="fas fa-dot-circle mr-2 text-purple text-xs"></i>
+                                {{ parasita }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Sintomas no Animal -->
+                    {% if vermifugo.sintomas_no_animal %}
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                            <i class="fas fa-exclamation-triangle mr-2 text-yellow-600"></i>
+                            Sintomas no Animal
+                        </h4>
+                        <div class="flex flex-wrap gap-2">
+                            {% for sintoma in vermifugo.sintomas_no_animal %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                {{ sintoma }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Medicamentos de Combate -->
+                    {% if vermifugo.medicamentos_de_combate %}
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                            <i class="fas fa-prescription-bottle-alt mr-2 text-green-600"></i>
+                            Medicamentos e Tratamentos
+                        </h4>
+                        
+                        <div class="space-y-4">
+                            {% for medicamento in vermifugo.medicamentos_de_combate %}
+                            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <!-- Tipo e Princípios Ativos -->
+                                <div class="flex items-center justify-between mb-3">
+                                    <h5 class="font-medium text-gray-900 text-sm">{{ medicamento.tipo }}</h5>
+                                    <div class="text-xs text-gray-500">
+                                        {{ medicamento.frequencia_recomendada }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Princípios Ativos -->
+                                {% if medicamento.principios_ativos %}
+                                <div class="mb-3">
+                                    <div class="text-xs font-medium text-gray-700 mb-2">Princípios Ativos:</div>
+                                    <div class="flex flex-wrap gap-1">
+                                        {% for principio in medicamento.principios_ativos %}
+                                        <span class="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-md border border-blue-200">
+                                            {{ principio }}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Descrição -->
+                                {% if medicamento.descricao %}
+                                <p class="text-sm text-gray-700 leading-relaxed">{{ medicamento.descricao }}</p>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Observações Adicionais -->
+                    {% if vermifugo.observacoes_adicionais %}
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-info-circle text-blue-400"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h4 class="text-sm font-semibold text-blue-900 mb-1">Observações Importantes</h4>
+                                <p class="text-sm text-blue-800">{{ vermifugo.observacoes_adicionais }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Estado Vazio -->
+        <div class="text-center py-12">
+            <div class="mb-4">
+                <i class="fas fa-search text-6xl text-gray-300"></i>
+            </div>
+            <h3 class="text-xl font-medium text-gray-900 mb-2">Nenhum vermífugo encontrado</h3>
+            <p class="text-gray-500 mb-6">
+                Tente ajustar os filtros de busca ou remover alguns termos para ver mais resultados.
+            </p>
+            <a href="/vermifugos" class="inline-flex items-center px-4 py-2 bg-purple text-white rounded-md hover:bg-purple-700 transition-colors duration-200">
+                <i class="fas fa-undo mr-2"></i>
+                Limpar Filtros
+            </a>
+        </div>
+        {% endif %}
+        </div>
+
+        <!-- Dicas para Tutores -->
+        <div class="mt-8 bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-blue-900 mb-3">
+                <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>
+                Dicas Importantes sobre Vermifugação
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-medium text-blue-800 mb-2">
+                        <i class="fas fa-calendar-alt mr-2"></i>Frequência
+                    </h4>
+                    <ul class="text-sm text-blue-700 space-y-1">
+                        <li>• Filhotes: a partir de 15 dias, com reforços a cada 15-21 dias até 6 meses</li>
+                        <li>• Adultos: a cada 3-6 meses conforme orientação veterinária</li>
+                        <li>• Vermifugação preventiva mensal em áreas de risco</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-medium text-blue-800 mb-2">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>Cuidados
+                    </h4>
+                    <ul class="text-sm text-blue-700 space-y-1">
+                        <li>• Sempre consulte um veterinário antes de vermifugar</li>
+                        <li>• Controle pulgas para prevenir tênias</li>
+                        <li>• Observe possíveis efeitos colaterais leves</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Link para Dashboard -->
+        <div class="text-center mt-8">
+            <a href="/dashboard" class="inline-flex items-center text-purple hover:text-purple-700 transition-colors duration-200">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Voltar ao Dashboard
+            </a>
+        </div>
+    </main>
+
+    <!-- JavaScript para Autocomplete -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search');
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            let timeoutId = null;
+
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                
+                clearTimeout(timeoutId);
+                
+                if (query.length >= 2) {
+                    timeoutId = setTimeout(() => {
+                        fetchSuggestions(query);
+                    }, 300);
+                } else {
+                    hideDropdown();
+                }
+            });
+
+            searchInput.addEventListener('focus', function() {
+                const query = this.value.trim();
+                if (query.length >= 2) {
+                    fetchSuggestions(query);
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    hideDropdown();
+                }
+            });
+
+            function fetchSuggestions(query) {
+                fetch(`/api/vermifugos/autocomplete?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        showSuggestions(data.suggestions || []);
+                    })
+                    .catch(error => {
+                        console.error('Erro ao buscar sugestões:', error);
+                        hideDropdown();
+                    });
+            }
+
+            function showSuggestions(suggestions) {
+                if (suggestions.length === 0) {
+                    hideDropdown();
+                    return;
+                }
+
+                const html = suggestions.map(suggestion => `
+                    <div class="suggestion-item px-4 py-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                         data-name="${suggestion.nome}">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-gray-900">${suggestion.nome}</div>
+                                <div class="text-sm text-gray-600">${suggestion.especies} • ${suggestion.tipo}</div>
+                                ${suggestion.contexto ? `<div class="text-xs text-purple-600 mt-1">Encontrado em: ${suggestion.contexto}</div>` : ''}
+                            </div>
+                            <i class="fas fa-pills text-purple"></i>
+                        </div>
+                    </div>
+                `).join('');
+
+                dropdown.innerHTML = html;
+                dropdown.classList.remove('hidden');
+
+                // Adiciona event listeners para as sugestões
+                dropdown.querySelectorAll('.suggestion-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const name = this.dataset.name;
+                        searchInput.value = name;
+                        hideDropdown();
+                        
+                        // Auto-submit do formulário
+                        searchInput.closest('form').submit();
+                    });
+                });
+            }
+
+            function hideDropdown() {
+                dropdown.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

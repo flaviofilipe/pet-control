@@ -62,6 +62,7 @@ COLLECTION_NAME = "profiles"
 PETS_COLLECTION_NAME = "pets"
 VACCINES_COLLECTION_NAME = "vacinas"
 ECTOPARASITES_COLLECTION_NAME = "ectoparasitas"
+VERMIFUGOS_COLLECTION_NAME = "vermifugos"
 
 # File upload configuration
 UPLOAD_DIR = Path("uploads")
@@ -81,6 +82,7 @@ try:
     pets_collection = db[PETS_COLLECTION_NAME]
     vaccines_collection = db[VACCINES_COLLECTION_NAME]
     ectoparasites_collection = db[ECTOPARASITES_COLLECTION_NAME]
+    vermifugos_collection = db[VERMIFUGOS_COLLECTION_NAME]
     client.admin.command("ismaster")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
@@ -728,6 +730,80 @@ def get_ectoparasites_page(
         raise HTTPException(status_code=500, detail="Erro ao carregar dados dos ectoparasitas")
 
 
+@app.get("/vermifugos")
+def get_vermifugos_page(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    search: Optional[str] = None,
+    especie: Optional[str] = None,
+    tipo: Optional[str] = None,
+):
+    """
+    Renderiza a página de vermífugos com informações detalhadas sobre cada tipo.
+    """
+    try:
+        # Busca o documento principal que contém todos os vermífugos
+        vermifugos_doc = vermifugos_collection.find_one()
+        
+        if not vermifugos_doc:
+            vermifugos_list = []
+        else:
+            vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
+        
+        # Aplica filtros se fornecidos
+        if search:
+            search_lower = search.lower()
+            vermifugos_list = [
+                v for v in vermifugos_list 
+                if search_lower in v.get("nome_praga", "").lower()
+                or search_lower in v.get("tipo_praga", "").lower()
+                or any(search_lower in sintoma.lower() for sintoma in v.get("sintomas_no_animal", []))
+                or any(search_lower in med.get("descricao", "").lower() for med in v.get("medicamentos_de_combate", []))
+                or any(search_lower in principio.lower() for med in v.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", []))
+                or search_lower in v.get("observacoes_adicionais", "").lower()
+            ]
+        
+        if especie:
+            vermifugos_list = [
+                v for v in vermifugos_list 
+                if especie in v.get("especies_alvo", [])
+            ]
+        
+        if tipo:
+            vermifugos_list = [
+                v for v in vermifugos_list 
+                if v.get("tipo_praga") == tipo
+            ]
+        
+        # Adiciona ID único para cada vermífugo para compatibilidade com templates
+        for i, vermifugo in enumerate(vermifugos_list):
+            vermifugo["_id"] = str(i)
+        
+        # Busca opções para filtros
+        all_vermifugos = vermifugos_doc.get("parasitas_e_tratamentos", []) if vermifugos_doc else []
+        especies = list(set([especie for v in all_vermifugos for especie in v.get("especies_alvo", [])]))
+        tipos = list(set([v.get("tipo_praga") for v in all_vermifugos if v.get("tipo_praga")]))
+        
+        return templates.TemplateResponse(
+            "pages/vermifugos.html",
+            {
+                "request": request,
+                "user": user,
+                "vermifugos": vermifugos_list,
+                "especies": especies,
+                "tipos": tipos,
+                "search": search or "",
+                "especie_filter": especie or "",
+                "tipo_filter": tipo or "",
+                "total_vermifugos": len(vermifugos_list)
+            },
+        )
+        
+    except Exception as e:
+        print(f"Error fetching vermifugos data: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao carregar dados dos vermífugos")
+
+
 @app.get("/api/vacinas/autocomplete")
 def get_vaccines_autocomplete(
     q: str = Query(..., min_length=1, description="Termo de busca"),
@@ -823,6 +899,81 @@ def get_ectoparasites_autocomplete(
         
     except Exception as e:
         print(f"Error in ectoparasites autocomplete: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
+
+
+@app.get("/api/vermifugos/autocomplete")
+def get_vermifugos_autocomplete(
+    q: str = Query(..., min_length=1, description="Termo de busca"),
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    """
+    Endpoint para autocomplete de vermífugos.
+    Retorna sugestões baseadas no nome da praga e outros campos.
+    """
+    try:
+        if len(q) < 1:
+            return {"suggestions": []}
+        
+        # Busca o documento principal que contém todos os vermífugos
+        vermifugos_doc = vermifugos_collection.find_one()
+        
+        if not vermifugos_doc:
+            return {"suggestions": []}
+        
+        vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
+        suggestions = []
+        
+        # Busca vermífugos que contenham o termo pesquisado
+        for i, vermifugo in enumerate(vermifugos_list):
+            q_lower = q.lower()
+            match_found = False
+            match_context = ""
+            
+            # Verifica se o termo está no nome da praga
+            if q_lower in vermifugo.get("nome_praga", "").lower():
+                match_found = True
+                match_context = "Nome"
+            
+            # Verifica se o termo está no tipo de praga
+            elif q_lower in vermifugo.get("tipo_praga", "").lower():
+                match_found = True
+                match_context = "Tipo"
+            
+            # Verifica se o termo está nos sintomas
+            elif any(q_lower in sintoma.lower() for sintoma in vermifugo.get("sintomas_no_animal", [])):
+                match_found = True
+                match_context = "Sintoma"
+            
+            # Verifica se o termo está nos princípios ativos
+            elif any(q_lower in principio.lower() for med in vermifugo.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", [])):
+                match_found = True
+                match_context = "Princípio Ativo"
+            
+            # Verifica se o termo está nas observações
+            elif q_lower in vermifugo.get("observacoes_adicionais", "").lower():
+                match_found = True
+                match_context = "Observações"
+            
+            if match_found:
+                especies = ", ".join(vermifugo.get("especies_alvo", []))
+                
+                suggestions.append({
+                    "id": str(i),
+                    "nome": vermifugo.get("nome_praga", ""),
+                    "especies": especies,
+                    "tipo": vermifugo.get("tipo_praga", ""),
+                    "contexto": match_context
+                })
+                
+                # Limita a 10 sugestões
+                if len(suggestions) >= 10:
+                    break
+        
+        return {"suggestions": suggestions}
+        
+    except Exception as e:
+        print(f"Error in vermifugos autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
 
 
