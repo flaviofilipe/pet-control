@@ -1,4 +1,4 @@
-### Proposta de Projeto: Patas Digitais
+# Proposta de Projeto: Patas Digitais
 
 **Resumo Argumentativo**
 
@@ -14,6 +14,7 @@ A stack tecnológica proposta para a construção desses módulos incluirá a li
 
 O público-alvo principal do projeto é composto por **tutores de pets e ONGs de proteção animal**, que buscam uma solução eficiente para o controle de tratamentos e a prevenção da negligência. A plataforma oferecerá uma ferramenta indispensável para que esses grupos possam gerir de forma proativa o bem-estar dos animais sob sua responsabilidade, alinhando-se diretamente com o conceito de posse responsável defendido pela legislação brasileira.
 
+# Descrição
 
 Com base nas leis brasileiras atuais e nas funcionalidades do "Patas Digitais", é possível argumentar de forma convincente sobre a necessidade e a utilidade do projeto. Ele não apenas se alinha à legislação, mas também a fortalece, oferecendo uma solução prática para os desafios da posse responsável.
 
