@@ -1550,7 +1550,7 @@ def add_treatment_page(
         raise HTTPException(status_code=404, detail="Pet not found.")
 
     return templates.TemplateResponse(
-        "treatment_form.html", {"request": request, "pet": pet, "treatment": None}
+        "treatment_form.html", {"request": request, "pet": pet, "treatment": None, "user_info": user["info"]}
     )
 
 
@@ -1570,6 +1570,14 @@ def create_or_update_treatment(
     done: bool = Form(False),
 ):
     user_id = user["id"]
+    
+    # Se o usuário logado é um veterinário e applier_type é "Veterinarian",
+    # adiciona automaticamente o veterinário à lista de usuários do pet
+    if applier_type == "Veterinarian" and user["info"].get("is_vet", False):
+        pets_collection.update_one(
+            {"_id": ObjectId(pet_id), "deleted_at": None},
+            {"$addToSet": {"users": user_id}}
+        )
 
     # Validações e criação do subdocumento
     treatment_data = {
@@ -1639,7 +1647,7 @@ def edit_treatment_page(
     treatment["_id"] = str(treatment["_id"])
 
     return templates.TemplateResponse(
-        "treatment_form.html", {"request": request, "pet": pet, "treatment": treatment}
+        "treatment_form.html", {"request": request, "pet": pet, "treatment": treatment, "user_info": user["info"]}
     )
 
 
@@ -1693,3 +1701,324 @@ def generate_pet_name(gender: str = Query(...)):
 
     # Remove duplicatas e retorna a lista
     return {"names": list(set(nomes))}
+
+
+# Rotas para gerenciamento de acesso de veterinários
+
+@app.get("/api/search-veterinarians")
+def search_veterinarians(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    search: str = Query(..., min_length=2),
+):
+    """
+    Busca veterinários por nome para vinculação a pets.
+    Apenas tutores podem buscar veterinários.
+    """
+    user_id = user["id"]
+    
+    # Busca veterinários que contenham o termo de busca no nome
+    veterinarians_cursor = profiles_collection.find({
+        "is_vet": True,
+        "name": {"$regex": search, "$options": "i"},
+        "_id": {"$ne": user_id}  # Exclui o próprio usuário
+    }).limit(10)
+    
+    veterinarians = []
+    for vet in veterinarians_cursor:
+        veterinarians.append({
+            "id": str(vet["_id"]),
+            "name": vet.get("name", "Sem nome"),
+            "email": vet.get("email", ""),
+        })
+    
+    return JSONResponse(content={"veterinarians": veterinarians})
+
+
+@app.post("/pets/{pet_id}/grant-access")
+def grant_veterinarian_access(
+    pet_id: str,
+    user: dict = Depends(get_current_user_info_from_session),
+    veterinarian_id: str = Form(...),
+):
+    """
+    Concede acesso de um veterinário a um pet específico.
+    Apenas o tutor do pet pode conceder acesso.
+    """
+    user_id = user["id"]
+    
+    # Verifica se o pet existe e se o usuário é o tutor
+    pet = pets_collection.find_one({
+        "_id": ObjectId(pet_id),
+        "users": user_id,
+        "deleted_at": None
+    })
+    
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
+    
+    # Verifica se o veterinário existe
+    vet = profiles_collection.find_one({
+        "_id": veterinarian_id,
+        "is_vet": True
+    })
+    
+    if not vet:
+        raise HTTPException(status_code=404, detail="Veterinário não encontrado.")
+    
+    # Adiciona o veterinário à lista de usuários do pet
+    result = pets_collection.update_one(
+        {"_id": ObjectId(pet_id)},
+        {"$addToSet": {"users": veterinarian_id}}
+    )
+    
+    if result.modified_count > 0:
+        return JSONResponse(content={
+            "success": True,
+            "message": f"Acesso concedido ao veterinário {vet.get('name', 'Sem nome')} com sucesso!"
+        })
+    else:
+        return JSONResponse(content={
+            "success": True,
+            "message": "O veterinário já tinha acesso a este pet."
+        })
+
+
+@app.post("/pets/{pet_id}/revoke-access")
+def revoke_veterinarian_access(
+    pet_id: str,
+    user: dict = Depends(get_current_user_info_from_session),
+    veterinarian_id: str = Form(...),
+):
+    """
+    Remove o acesso de um veterinário a um pet específico.
+    Apenas o tutor do pet pode remover acesso.
+    """
+    user_id = user["id"]
+    
+    # Verifica se o pet existe e se o usuário é o tutor
+    pet = pets_collection.find_one({
+        "_id": ObjectId(pet_id),
+        "users": user_id,
+        "deleted_at": None
+    })
+    
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
+    
+    # Não permite remover o próprio tutor
+    if veterinarian_id == user_id:
+        raise HTTPException(status_code=400, detail="Você não pode remover seu próprio acesso.")
+    
+    # Remove o veterinário da lista de usuários do pet
+    result = pets_collection.update_one(
+        {"_id": ObjectId(pet_id)},
+        {"$pull": {"users": veterinarian_id}}
+    )
+    
+    if result.modified_count > 0:
+        return JSONResponse(content={
+            "success": True,
+            "message": "Acesso do veterinário removido com sucesso!"
+        })
+    else:
+        return JSONResponse(content={
+            "success": False,
+            "message": "Veterinário não tinha acesso a este pet."
+        })
+
+
+@app.get("/pets/{pet_id}/veterinarians")
+def get_pet_veterinarians(
+    pet_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+):
+    """
+    Lista os veterinários que têm acesso ao pet.
+    Apenas o tutor do pet pode ver esta lista.
+    """
+    user_id = user["id"]
+    
+    # Verifica se o pet existe e se o usuário é o tutor
+    pet = pets_collection.find_one({
+        "_id": ObjectId(pet_id),
+        "users": user_id,
+        "deleted_at": None
+    })
+    
+    if not pet:
+        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
+    
+    # Busca todos os veterinários que têm acesso (exceto o tutor)
+    veterinarian_ids = [uid for uid in pet.get("users", []) if uid != user_id]
+    
+    veterinarians = []
+    if veterinarian_ids:
+        vets_cursor = profiles_collection.find({
+            "_id": {"$in": veterinarian_ids},
+            "is_vet": True
+        })
+        
+        for vet in vets_cursor:
+            veterinarians.append({
+                "id": str(vet["_id"]),
+                "name": vet.get("name", "Sem nome"),
+                "email": vet.get("email", ""),
+            })
+    
+    return JSONResponse(content={"veterinarians": veterinarians})
+
+
+@app.get("/vet-dashboard", name="vet_dashboard")
+def get_vet_dashboard_page(
+    request: Request, user: dict = Depends(get_current_user_info_from_session)
+):
+    """
+    Renderiza o dashboard específico para veterinários.
+    """
+    try:
+        is_authenticated = "access_token" in request.session
+        user_id = user["id"]
+        
+        # Busca pets que o veterinário tem acesso
+        pets_cursor = pets_collection.find({"users": user_id, "deleted_at": None})
+        pets_list = []
+        for pet in pets_cursor:
+            pet["_id"] = str(pet["_id"])
+            if "treatments" in pet:
+                for treatment in pet["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+            pets_list.append(pet)
+
+        return templates.TemplateResponse(
+            "vet_dashboard.html",
+            {
+                "request": request,
+                "is_authenticated": is_authenticated,
+                "current_year": 2024,
+                "user_info": user["info"],
+                "pets": pets_list,
+            },
+        )
+    except HTTPException as e:
+        print(f"Error fetching vet dashboard data: {e}")
+
+
+@app.get("/api/search-pet-by-nickname")
+def search_pet_by_nickname(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    nickname: str = Query(...),
+):
+    """
+    Busca um pet pelo nickname para veterinários visualizarem informações básicas.
+    """
+    try:
+        pet = pets_collection.find_one({
+            "nickname": nickname, 
+            "deleted_at": None
+        })
+        
+        if not pet:
+            return JSONResponse(
+                content={"success": False, "message": "Pet não encontrado."},
+                status_code=404
+            )
+        
+        # Converte ObjectId para string
+        pet["_id"] = str(pet["_id"])
+        if "users" in pet:
+            pet["users"] = [str(uid) for uid in pet["users"]]
+        
+        # Remove dados sensíveis se o veterinário não tem acesso
+        user_id = user["id"]
+        has_access = user_id in pet.get("users", [])
+        
+        if not has_access:
+            # Remove informações detalhadas se não tem acesso
+            pet = {
+                "_id": pet["_id"],
+                "name": pet.get("name"),
+                "nickname": pet.get("nickname"),
+                "breed": pet.get("breed"),
+                "pet_type": pet.get("pet_type"),
+                "gender": pet.get("gender"),
+                "birth_date": pet.get("birth_date"),
+                "has_access": False,
+                "message": "Você não tem acesso ao histórico completo deste pet."
+            }
+        else:
+            pet["has_access"] = True
+            # Converte treatment IDs também
+            if "treatments" in pet:
+                for treatment in pet["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+        
+        return JSONResponse(content={"success": True, "pet": pet})
+        
+    except Exception as e:
+        return JSONResponse(
+            content={"success": False, "message": "Erro ao buscar pet."},
+            status_code=500
+        )
+
+
+@app.get("/api/search-pet-by-id")
+def search_pet_by_id(
+    request: Request,
+    user: dict = Depends(get_current_user_info_from_session),
+    pet_id: str = Query(...),
+):
+    """
+    Busca um pet pelo ID para veterinários visualizarem informações básicas.
+    (Mantido para compatibilidade)
+    """
+    try:
+        pet = pets_collection.find_one({
+            "_id": ObjectId(pet_id), 
+            "deleted_at": None
+        })
+        
+        if not pet:
+            return JSONResponse(
+                content={"success": False, "message": "Pet não encontrado."},
+                status_code=404
+            )
+        
+        # Converte ObjectId para string
+        pet["_id"] = str(pet["_id"])
+        if "users" in pet:
+            pet["users"] = [str(uid) for uid in pet["users"]]
+        
+        # Remove dados sensíveis se o veterinário não tem acesso
+        user_id = user["id"]
+        has_access = user_id in pet.get("users", [])
+        
+        if not has_access:
+            # Remove informações detalhadas se não tem acesso
+            pet = {
+                "_id": pet["_id"],
+                "name": pet.get("name"),
+                "nickname": pet.get("nickname"),
+                "breed": pet.get("breed"),
+                "pet_type": pet.get("pet_type"),
+                "gender": pet.get("gender"),
+                "birth_date": pet.get("birth_date"),
+                "has_access": False,
+                "message": "Você não tem acesso ao histórico completo deste pet."
+            }
+        else:
+            pet["has_access"] = True
+            # Converte treatment IDs também
+            if "treatments" in pet:
+                for treatment in pet["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+        
+        return JSONResponse(content={"success": True, "pet": pet})
+        
+    except Exception as e:
+        return JSONResponse(
+            content={"success": False, "message": "Erro ao buscar pet."},
+            status_code=500
+        )

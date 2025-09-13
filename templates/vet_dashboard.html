@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Veterinário</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f2ea;
+            color: #4b4b4b;
+        }
+        .bg-terracotta { background-color: #e57373; }
+        .text-terracotta { color: #e57373; }
+        .bg-sage { background-color: #5c6e5e; }
+        .text-sage { color: #5c6e5e; }
+        
+        /* Sidebar styles */
+        .sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .sidebar-overlay {
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease-in-out;
+        }
+        .sidebar-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        @media (min-width: 1024px) {
+            .sidebar {
+                transform: translateX(0);
+            }
+            .sidebar-overlay {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+    <!-- Header com Menu Sanduíche -->
+    <header class="bg-sage text-white shadow-md p-4 z-50 flex-shrink-0">
+        <nav class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <!-- Botão do menu sanduíche (mobile) -->
+                <button id="sidebar-toggle" class="lg:hidden text-white hover:text-gray-200 transition-colors duration-200">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                
+                <!-- Foto e nome do usuário -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-terracotta rounded-full flex items-center justify-center">
+                        <span class="text-white font-bold text-sm">
+                            {{ user_info.name[0] | upper if user_info.name else 'V' }}
+                        </span>
+                    </div>
+                    <div>
+                        <p class="font-medium">Dr. {{ user_info.name | default('Veterinário') }}</p>
+                        <p class="text-sm text-gray-200">Veterinário</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <a href="/profile" class="bg-terracotta hover:bg-[#d56b6b] text-white px-4 py-2 rounded-md font-medium transition-colors duration-200">
+                    Perfil
+                </a>
+                <a href="/logout" class="bg-[#8b4513] hover:bg-[#a0522d] text-white px-4 py-2 rounded-md font-medium transition-colors duration-200">
+                    Sair
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Container principal com sidebar e conteúdo -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar Overlay (mobile) -->
+        <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"></div>
+        
+        <!-- Sidebar -->
+        <aside class="sidebar bg-white w-64 shadow-lg z-50 fixed lg:static inset-y-0 left-0 flex flex-col">
+            <div class="flex-1 flex flex-col">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center">
+                        <i class="fas fa-stethoscope text-2xl text-sage mr-3"></i>
+                        <h2 class="text-lg font-bold text-sage">Dashboard Veterinário</h2>
+                    </div>
+                </div>
+
+                <!-- Menu de Navegação -->
+                <nav class="flex-1 px-6 space-y-2">
+                    <!-- Dashboard -->
+                    <a href="/vet-dashboard" class="flex items-center px-4 py-3 text-gray-700 bg-gray-100 rounded-lg font-medium">
+                        <i class="fas fa-home mr-3 text-sage"></i>
+                        Dashboard
+                    </a>
+
+                    <!-- Seção Gerenciar -->
+                    <div class="mt-6">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-4">
+                            Ferramentas
+                        </h3>
+                        
+                        <button onclick="openSearchModal()" class="w-full flex items-center px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-search mr-3 text-green-600"></i>
+                            Pesquisar Pet
+                        </button>
+                        
+                        <a href="/profile" class="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-user-edit mr-3 text-blue-600"></i>
+                            Editar Perfil
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <main class="flex-1 overflow-y-auto bg-gray-50">
+            <div class="p-6">
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-sage">Meus Pacientes</h2>
+                    <p class="text-gray-600">Pets aos quais você tem acesso autorizado.</p>
+                </div>
+
+                {% if pets %}
+                <!-- Grid de Cards dos Pets -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for pet in pets %}
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200">
+                        <!-- Header do Card -->
+                        <div class="bg-gradient-to-r from-sage to-[#6b7e6b] p-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }} text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-lg">{{ pet.name }}</h3>
+                                        <p class="text-sm opacity-90">@{{ pet.nickname or pet.name.lower() }}</p>
+                                        <p class="text-xs opacity-75">{{ pet.breed }}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white bg-opacity-20">
+                                        <i class="fas fa-{{ 'dog' if pet.pet_type == 'dog' else 'cat' }} mr-1"></i>
+                                        {{ 'Cão' if pet.pet_type == 'dog' else 'Gato' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Corpo do Card -->
+                        <div class="p-4">
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Idade:</span>
+                                    <span class="font-medium">
+                                        {% if pet.birth_date %}
+                                            {% set birth_year = pet.birth_date.split('-')[0] | int %}
+                                            {% set current_year = 2024 %}
+                                            {{ current_year - birth_year }} anos
+                                        {% else %}
+                                            Não informado
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Gênero:</span>
+                                    <span class="font-medium">{{ 'Macho' if pet.gender == 'male' else 'Fêmea' }}</span>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Tratamentos:</span>
+                                    <span class="font-medium">{{ pet.treatments | length if pet.treatments else 0 }}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Ações do Card -->
+                            <div class="mt-4 pt-4 border-t border-gray-200">
+                                <a href="/pets/{{ pet._id }}/profile" class="block w-full text-center bg-sage hover:bg-[#4f5e51] text-white py-2 px-4 rounded-lg font-medium transition-colors duration-200">
+                                    <i class="fas fa-eye mr-2"></i>
+                                    Ver Perfil
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <!-- Estado Vazio -->
+                <div class="text-center py-16">
+                    <div class="max-w-md mx-auto">
+                        <i class="fas fa-stethoscope text-6xl text-gray-400 mb-6"></i>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-3">Nenhum paciente encontrado</h3>
+                        <p class="text-gray-600 mb-6">Você ainda não tem acesso a nenhum pet. Entre em contato com os tutores para solicitar acesso ou use a ferramenta de pesquisa.</p>
+                        <button onclick="openSearchModal()" class="bg-sage hover:bg-[#4f5e51] text-white py-2 px-6 rounded-lg font-medium transition-colors duration-200">
+                            <i class="fas fa-search mr-2"></i>
+                            Pesquisar Pet
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal de Pesquisa de Pet -->
+    <div id="searchModal" style="display: none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-sage">Pesquisar Pet por Nickname</h3>
+                    <button onclick="closeSearchModal()" class="text-gray-500 hover:text-gray-700 text-xl font-bold">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Campo de Pesquisa -->
+                <div class="mb-6">
+                    <label for="petNicknameInput" class="block text-sm font-medium text-gray-700 mb-2">Nickname do Pet</label>
+                    <div class="relative">
+                        <input type="text" 
+                               id="petNicknameInput" 
+                               placeholder="Digite o nickname do pet (ex: max_1234, bella_5678)"
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sage focus:border-sage">
+                        <button onclick="searchPetByNickname()" class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-sage hover:bg-[#4f5e51] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-search mr-1"></i>
+                            Buscar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resultados da Pesquisa -->
+                <div id="searchResult" class="hidden">
+                    <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                        <div id="petInfo"></div>
+                    </div>
+                </div>
+
+                <!-- Mensagem de Erro -->
+                <div id="searchError" class="hidden">
+                    <div class="border border-red-200 rounded-lg p-4 bg-red-50">
+                        <div class="flex">
+                            <i class="fas fa-exclamation-circle text-red-400 mr-3 mt-1"></i>
+                            <div>
+                                <p class="text-red-800 font-medium">Pet não encontrado</p>
+                                <p class="text-red-600 text-sm mt-1">Verifique se o ID está correto e tente novamente.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end mt-6">
+                    <button onclick="closeSearchModal()" 
+                            class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sidebar toggle functionality
+        document.getElementById('sidebar-toggle').addEventListener('click', function() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+        });
+
+        document.getElementById('sidebar-overlay').addEventListener('click', function() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        });
+
+        // Funções do modal de pesquisa
+        function openSearchModal() {
+            document.getElementById('searchModal').style.display = 'block';
+            document.getElementById('petNicknameInput').focus();
+        }
+
+        function closeSearchModal() {
+            document.getElementById('searchModal').style.display = 'none';
+            document.getElementById('petNicknameInput').value = '';
+            document.getElementById('searchResult').classList.add('hidden');
+            document.getElementById('searchError').classList.add('hidden');
+        }
+
+        function searchPetByNickname() {
+            const petNickname = document.getElementById('petNicknameInput').value.trim();
+            if (!petNickname) {
+                alert('Por favor, insira um nickname de pet.');
+                return;
+            }
+
+            // Esconder resultados anteriores
+            document.getElementById('searchResult').classList.add('hidden');
+            document.getElementById('searchError').classList.add('hidden');
+
+            fetch(`/api/search-pet-by-nickname?nickname=${encodeURIComponent(petNickname)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayPetInfo(data.pet);
+                    } else {
+                        document.getElementById('searchError').classList.remove('hidden');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar pet:', error);
+                    document.getElementById('searchError').classList.remove('hidden');
+                });
+        }
+
+        function displayPetInfo(pet) {
+            const petInfoDiv = document.getElementById('petInfo');
+            
+            const accessMessage = pet.has_access ? 
+                '<div class="bg-green-100 border border-green-200 rounded-lg p-3 mb-4"><p class="text-green-800 text-sm"><i class="fas fa-check-circle mr-2"></i>Você tem acesso ao histórico completo deste pet.</p></div>' :
+                `<div class="bg-yellow-100 border border-yellow-200 rounded-lg p-3 mb-4"><p class="text-yellow-800 text-sm"><i class="fas fa-exclamation-triangle mr-2"></i>${pet.message}</p></div>`;
+
+            petInfoDiv.innerHTML = `
+                <div class="flex items-start space-x-4">
+                    <div class="w-16 h-16 bg-sage bg-opacity-20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-${pet.pet_type === 'dog' ? 'dog' : 'cat'} text-2xl text-sage"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">${pet.name}</h4>
+                        <p class="text-sm text-sage font-medium mb-3">@${pet.nickname || pet.name.toLowerCase()}</p>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div><span class="text-gray-600">Raça:</span> <span class="font-medium">${pet.breed}</span></div>
+                            <div><span class="text-gray-600">Tipo:</span> <span class="font-medium">${pet.pet_type === 'dog' ? 'Cão' : 'Gato'}</span></div>
+                            <div><span class="text-gray-600">Gênero:</span> <span class="font-medium">${pet.gender === 'male' ? 'Macho' : 'Fêmea'}</span></div>
+                            <div><span class="text-gray-600">Data de Nascimento:</span> <span class="font-medium">${pet.birth_date || 'Não informado'}</span></div>
+                        </div>
+                        ${accessMessage}
+                        ${pet.has_access ? `
+                            <div class="mt-4">
+                                <a href="/pets/${pet._id}/profile" class="inline-flex items-center bg-sage hover:bg-[#4f5e51] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    <i class="fas fa-eye mr-2"></i>
+                                    Ver Perfil Completo
+                                </a>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('searchResult').classList.remove('hidden');
+        }
+
+        // Permitir pesquisa ao pressionar Enter
+        document.getElementById('petNicknameInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPetByNickname();
+            }
+        });
+    </script>
+</body>
+</html>
