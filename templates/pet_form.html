@@ -214,8 +214,19 @@
                 }
             };
             
-            getDogBreeds();
-            getCatBreeds();
+            // Função para inicializar as raças
+            const initializeBreeds = async () => {
+                await Promise.all([getDogBreeds(), getCatBreeds()]);
+                
+                // Após carregar as raças, verificar se já há um tipo selecionado (caso de edição)
+                const initialPetType = petTypeSelect.value;
+                if (initialPetType) {
+                    updateBreedsList();
+                }
+            };
+
+            // Inicializar raças
+            initializeBreeds();
 
             const renderBreeds = (filteredBreeds) => {
                 breedsList.innerHTML = '';
@@ -430,12 +441,6 @@
                     photoPreview.classList.add('hidden');
                 }
             });
-
-            // Chamada inicial para popular a lista de raças se o tipo de pet já estiver selecionado
-            const initialPetType = petTypeSelect.value;
-            if (initialPetType) {
-                updateBreedsList();
-            }
 
             toggleGenerateButton();
         });

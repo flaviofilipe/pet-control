@@ -117,6 +117,32 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+
+def cleanup_temp_images():
+    """
+    Remove imagens temporárias antigas (pasta temp).
+    """
+    try:
+        temp_dir = UPLOAD_DIR / "temp"
+        if temp_dir.exists():
+            # Remove arquivos mais antigos que 1 hora
+            import time
+
+            current_time = time.time()
+            for file_path in temp_dir.glob("*"):
+                if file_path.is_file():
+                    file_age = current_time - file_path.stat().st_mtime
+                    if file_age > 3600:  # 1 hora em segundos
+                        file_path.unlink()
+                        print(f"Removido arquivo temporário antigo: {file_path}")
+    except Exception as e:
+        print(f"Erro ao limpar arquivos temporários: {e}")
+
+
+# Limpa arquivos temporários antigos na inicialização
+cleanup_temp_images()
+
+
 # Tratamento de erro global para redirecionar usuários não autenticados
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -136,16 +162,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
                 "error_code": 408,
                 "error_title": "Timeout",
                 "error_message": "A requisição demorou muito para responder. Tente novamente.",
-                "show_retry": True
+                "show_retry": True,
             },
-            status_code=408
+            status_code=408,
         )
-    
+
     # Para outras exceções HTTP, retorna a resposta padrão
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 # Inicializa Faker e adiciona provedor de alimentos
 fake = Faker("pt_BR")
@@ -155,16 +179,20 @@ fake.add_provider(FoodProvider)
 user_cache = {}
 CACHE_DURATION = 300  # 5 minutos
 
+
 def clear_user_cache(user_id: str = None):
     """Limpa o cache de usuários. Se user_id for fornecido, limpa apenas esse usuário."""
     if user_id:
         # Remove entradas que contenham o user_id
-        keys_to_remove = [key for key in user_cache.keys() if user_id in str(user_cache[key][0])]
+        keys_to_remove = [
+            key for key in user_cache.keys() if user_id in str(user_cache[key][0])
+        ]
         for key in keys_to_remove:
             del user_cache[key]
     else:
         # Limpa todo o cache
         user_cache.clear()
+
 
 # Cria diretório de uploads se não existir
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -178,22 +206,26 @@ def validate_image_file(file: UploadFile) -> tuple[bool, str]:
     """
     if not file.filename:
         return False, "Nenhum arquivo selecionado"
-    
+
     # Verifica extensão
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
-        return False, f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS).upper()}"
-    
+        return (
+            False,
+            f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS).upper()}",
+        )
+
     # Verifica se é um arquivo HEIC (não suportado)
-    if file_ext in ['.heic', '.heif']:
+    if file_ext in [".heic", ".heif"]:
         return False, "Arquivos HEIC não são suportados. Use JPG, PNG, GIF ou WebP."
-    
+
     # Verifica tamanho
     if file.size and file.size > MAX_FILE_SIZE:
         max_size_mb = MAX_FILE_SIZE // (1024 * 1024)
         return False, f"Arquivo muito grande. Tamanho máximo: {max_size_mb}MB"
-    
+
     return True, ""
+
 
 def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
     """
@@ -203,47 +235,47 @@ def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
     # Gera nome único para o arquivo
     file_ext = Path(file.filename).suffix.lower()
     unique_filename = f"{pet_id}_{uuid.uuid4().hex}{file_ext}"
-    
+
     # Cria diretório específico para o pet
     pet_upload_dir = UPLOAD_DIR / pet_id
     pet_upload_dir.mkdir(exist_ok=True)
-    
+
     # Caminhos dos arquivos
     original_path = pet_upload_dir / unique_filename
     thumbnail_path = pet_upload_dir / f"thumb_{unique_filename}"
-    
+
     try:
         # Lê o arquivo
         contents = file.file.read()
-        
+
         # Salva arquivo original
         with open(original_path, "wb") as f:
             f.write(contents)
-        
+
         # Processa a imagem
         try:
             # Abre a imagem com PIL
             image = Image.open(io.BytesIO(contents))
-                    
+
         except Exception as e:
             raise Exception(f"Formato de imagem não suportado: {str(e)}")
-        
+
         # Converte para RGB se necessário
-        if image.mode in ('RGBA', 'LA', 'P'):
-            image = image.convert('RGB')
-        
+        if image.mode in ("RGBA", "LA", "P"):
+            image = image.convert("RGB")
+
         # Redimensiona mantendo proporção
         image.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
-        
+
         # Salva miniatura
         image.save(thumbnail_path, "JPEG", quality=85, optimize=True)
-        
+
         return {
             "original": str(original_path),
             "thumbnail": str(thumbnail_path),
-            "filename": unique_filename
+            "filename": unique_filename,
         }
-        
+
     except Exception as e:
         # Remove arquivos em caso de erro
         if original_path.exists():
@@ -251,9 +283,9 @@ def save_image_with_thumbnail(file: UploadFile, pet_id: str) -> dict:
         if thumbnail_path.exists():
             thumbnail_path.unlink()
         raise HTTPException(
-            status_code=400,
-            detail=f"Erro ao processar imagem: {str(e)}"
+            status_code=400, detail=f"Erro ao processar imagem: {str(e)}"
         )
+
 
 def delete_pet_images(pet_id: str):
     """
@@ -262,6 +294,7 @@ def delete_pet_images(pet_id: str):
     pet_upload_dir = UPLOAD_DIR / pet_id
     if pet_upload_dir.exists():
         shutil.rmtree(pet_upload_dir)
+
 
 # Funções para buscar raças
 def get_dog_breeds_list():
@@ -326,12 +359,14 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
     """
     access_token = request.session.get("access_token")
     refresh_token = request.session.get("refresh_token")
-    
+
     # Verifica se há um flag de refresh em andamento para evitar loops
     if request.session.get("refreshing_token"):
         print("Token refresh already in progress, clearing session to avoid loop")
         request.session.clear()
-        raise HTTPException(status_code=401, detail="Authentication loop detected. Please log in again.")
+        raise HTTPException(
+            status_code=401, detail="Authentication loop detected. Please log in again."
+        )
 
     if not access_token:
         # Lança exceção para que o FastAPI lide com o redirecionamento
@@ -340,7 +375,7 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
     # Verifica cache primeiro
     cache_key = f"user_{access_token[:20]}"  # Usa parte do token como chave
     current_time = time.time()
-    
+
     if cache_key in user_cache:
         cached_data, cache_time = user_cache[cache_key]
         if current_time - cache_time < CACHE_DURATION:
@@ -364,22 +399,24 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
             raise HTTPException(status_code=401, detail="User ID not found in token.")
 
         result = {"id": user_id, "info": user_info}
-        
+
         # Armazena no cache
         user_cache[cache_key] = (result, current_time)
-        
+
         return result
     except requests.exceptions.Timeout:
         print("Auth0 UserInfo request timed out")
         # Para timeouts, não limpa a sessão, apenas relança a exceção
-        raise HTTPException(status_code=408, detail="Request timeout. Please try again.")
+        raise HTTPException(
+            status_code=408, detail="Request timeout. Please try again."
+        )
     except requests.exceptions.HTTPError as http_err:
         if http_err.response.status_code == 401 and refresh_token:
             print("Access token expired, attempting to refresh...")
             try:
                 # Marca que está fazendo refresh para evitar loops
                 request.session["refreshing_token"] = True
-                
+
                 new_tokens = refresh_auth_token(refresh_token)
                 new_access_token = new_tokens.get("access_token")
                 new_refresh_token = new_tokens.get("refresh_token", refresh_token)
@@ -388,7 +425,7 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
                 request.session["refresh_token"] = new_refresh_token
                 # Remove o flag de refresh
                 request.session.pop("refreshing_token", None)
-                
+
                 # Limpa o cache antigo
                 old_cache_key = f"user_{access_token[:20]}"
                 if old_cache_key in user_cache:
@@ -408,16 +445,18 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
                 user_id = user_info.get("sub")
 
                 result = {"id": user_id, "info": user_info}
-                
+
                 # Armazena no cache com a nova chave
                 new_cache_key = f"user_{new_access_token[:20]}"
                 user_cache[new_cache_key] = (result, current_time)
-                
+
                 return result
             except requests.exceptions.Timeout:
                 print("Token refresh request timed out")
                 request.session.pop("refreshing_token", None)
-                raise HTTPException(status_code=408, detail="Token refresh timeout. Please try again.")
+                raise HTTPException(
+                    status_code=408, detail="Token refresh timeout. Please try again."
+                )
             except requests.exceptions.RequestException as refresh_err:
                 print(f"Token refresh failed: {refresh_err}. Forcing re-login.")
                 request.session.clear()
@@ -430,18 +469,24 @@ def get_current_user_info_from_session(request: Request) -> dict | Exception:
             print(f"Auth0 UserInfo request failed with HTTP error: {http_err}")
             # Para outros erros HTTP, limpa a sessão
             request.session.clear()
-            raise HTTPException(status_code=401, detail="Could not validate credentials")
+            raise HTTPException(
+                status_code=401, detail="Could not validate credentials"
+            )
     except requests.exceptions.RequestException as e:
         print(f"Auth0 UserInfo request failed: {e}")
         logging.error(f"Auth0 UserInfo request failed: {e}")
-        
+
         # Para erros de rede, não limpa a sessão imediatamente
         if "timeout" in str(e).lower():
-            raise HTTPException(status_code=408, detail="Network timeout. Please try again.")
+            raise HTTPException(
+                status_code=408, detail="Network timeout. Please try again."
+            )
         else:
             # Para outros erros de rede, limpa a sessão
             request.session.clear()
-            raise HTTPException(status_code=401, detail="Could not validate credentials")
+            raise HTTPException(
+                status_code=401, detail="Could not validate credentials"
+            )
 
 
 def get_current_user_info_from_header(authorization: str = Header(...)):
@@ -614,31 +659,31 @@ def get_vaccines_page(
     try:
         # Filtros de busca
         filter_query = {}
-        
+
         if search:
             filter_query["$or"] = [
                 {"nome_vacina": {"$regex": search, "$options": "i"}},
                 {"descricao": {"$regex": search, "$options": "i"}},
-                {"protege_contra": {"$regex": search, "$options": "i"}}
+                {"protege_contra": {"$regex": search, "$options": "i"}},
             ]
-        
+
         if especie:
             filter_query["especie_alvo"] = especie
-        
+
         if tipo:
             filter_query["tipo_vacina"] = tipo
-        
+
         # Busca vacinas com filtros
         vacinas = list(vaccines_collection.find(filter_query).sort("nome_vacina", 1))
-        
+
         # Converte ObjectId para string
         for vacina in vacinas:
             vacina["_id"] = str(vacina["_id"])
-        
+
         # Busca opções para filtros
         especies = list(vaccines_collection.distinct("especie_alvo"))
         tipos = list(vaccines_collection.distinct("tipo_vacina"))
-        
+
         return templates.TemplateResponse(
             "pages/vacinas.html",
             {
@@ -650,13 +695,15 @@ def get_vaccines_page(
                 "search": search or "",
                 "especie_filter": especie or "",
                 "tipo_filter": tipo or "",
-                "total_vacinas": len(vacinas)
+                "total_vacinas": len(vacinas),
             },
         )
-        
+
     except Exception as e:
         print(f"Error fetching vaccines data: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao carregar dados das vacinas")
+        raise HTTPException(
+            status_code=500, detail="Erro ao carregar dados das vacinas"
+        )
 
 
 @app.get("/ectoparasitas")
@@ -673,30 +720,42 @@ def get_ectoparasites_page(
     try:
         # Filtros de busca
         filter_query = {}
-        
+
         if search:
             filter_query["$or"] = [
                 {"nome_praga": {"$regex": search, "$options": "i"}},
                 {"transmissor_de_doencas": {"$regex": search, "$options": "i"}},
                 {"sintomas_no_animal": {"$regex": search, "$options": "i"}},
-                {"medicamentos_de_combate.descricao": {"$regex": search, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": search, "$options": "i"}},
-                {"observacoes_adicionais": {"$regex": search, "$options": "i"}}
+                {
+                    "medicamentos_de_combate.descricao": {
+                        "$regex": search,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "medicamentos_de_combate.principios_ativos": {
+                        "$regex": search,
+                        "$options": "i",
+                    }
+                },
+                {"observacoes_adicionais": {"$regex": search, "$options": "i"}},
             ]
-        
+
         if especie:
             filter_query["especies_alvo"] = especie
-        
+
         if tipo:
             filter_query["tipo_praga"] = tipo
-        
+
         # Busca ectoparasitas com filtros
-        ectoparasitas = list(ectoparasites_collection.find(filter_query).sort("nome_praga", 1))
-        
+        ectoparasitas = list(
+            ectoparasites_collection.find(filter_query).sort("nome_praga", 1)
+        )
+
         # Converte ObjectId para string
         for ectoparasita in ectoparasitas:
             ectoparasita["_id"] = str(ectoparasita["_id"])
-        
+
         # Busca opções para filtros
         especies = list(ectoparasites_collection.distinct("especies_alvo"))
         # Flatten da lista de listas
@@ -707,9 +766,9 @@ def get_ectoparasites_page(
             else:
                 especies_flat.append(especie_list)
         especies = list(set(especies_flat))  # Remove duplicatas
-        
+
         tipos = list(ectoparasites_collection.distinct("tipo_praga"))
-        
+
         return templates.TemplateResponse(
             "pages/ectoparasitas.html",
             {
@@ -721,13 +780,15 @@ def get_ectoparasites_page(
                 "search": search or "",
                 "especie_filter": especie or "",
                 "tipo_filter": tipo or "",
-                "total_ectoparasitas": len(ectoparasitas)
+                "total_ectoparasitas": len(ectoparasitas),
             },
         )
-        
+
     except Exception as e:
         print(f"Error fetching ectoparasites data: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao carregar dados dos ectoparasitas")
+        raise HTTPException(
+            status_code=500, detail="Erro ao carregar dados dos ectoparasitas"
+        )
 
 
 @app.get("/vermifugos")
@@ -744,46 +805,67 @@ def get_vermifugos_page(
     try:
         # Busca o documento principal que contém todos os vermífugos
         vermifugos_doc = vermifugos_collection.find_one()
-        
+
         if not vermifugos_doc:
             vermifugos_list = []
         else:
             vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
-        
+
         # Aplica filtros se fornecidos
         if search:
             search_lower = search.lower()
             vermifugos_list = [
-                v for v in vermifugos_list 
+                v
+                for v in vermifugos_list
                 if search_lower in v.get("nome_praga", "").lower()
                 or search_lower in v.get("tipo_praga", "").lower()
-                or any(search_lower in sintoma.lower() for sintoma in v.get("sintomas_no_animal", []))
-                or any(search_lower in med.get("descricao", "").lower() for med in v.get("medicamentos_de_combate", []))
-                or any(search_lower in principio.lower() for med in v.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", []))
+                or any(
+                    search_lower in sintoma.lower()
+                    for sintoma in v.get("sintomas_no_animal", [])
+                )
+                or any(
+                    search_lower in med.get("descricao", "").lower()
+                    for med in v.get("medicamentos_de_combate", [])
+                )
+                or any(
+                    search_lower in principio.lower()
+                    for med in v.get("medicamentos_de_combate", [])
+                    for principio in med.get("principios_ativos", [])
+                )
                 or search_lower in v.get("observacoes_adicionais", "").lower()
             ]
-        
+
         if especie:
             vermifugos_list = [
-                v for v in vermifugos_list 
-                if especie in v.get("especies_alvo", [])
+                v for v in vermifugos_list if especie in v.get("especies_alvo", [])
             ]
-        
+
         if tipo:
             vermifugos_list = [
-                v for v in vermifugos_list 
-                if v.get("tipo_praga") == tipo
+                v for v in vermifugos_list if v.get("tipo_praga") == tipo
             ]
-        
+
         # Adiciona ID único para cada vermífugo para compatibilidade com templates
         for i, vermifugo in enumerate(vermifugos_list):
             vermifugo["_id"] = str(i)
-        
+
         # Busca opções para filtros
-        all_vermifugos = vermifugos_doc.get("parasitas_e_tratamentos", []) if vermifugos_doc else []
-        especies = list(set([especie for v in all_vermifugos for especie in v.get("especies_alvo", [])]))
-        tipos = list(set([v.get("tipo_praga") for v in all_vermifugos if v.get("tipo_praga")]))
-        
+        all_vermifugos = (
+            vermifugos_doc.get("parasitas_e_tratamentos", []) if vermifugos_doc else []
+        )
+        especies = list(
+            set(
+                [
+                    especie
+                    for v in all_vermifugos
+                    for especie in v.get("especies_alvo", [])
+                ]
+            )
+        )
+        tipos = list(
+            set([v.get("tipo_praga") for v in all_vermifugos if v.get("tipo_praga")])
+        )
+
         return templates.TemplateResponse(
             "pages/vermifugos.html",
             {
@@ -795,13 +877,15 @@ def get_vermifugos_page(
                 "search": search or "",
                 "especie_filter": especie or "",
                 "tipo_filter": tipo or "",
-                "total_vermifugos": len(vermifugos_list)
+                "total_vermifugos": len(vermifugos_list),
             },
         )
-        
+
     except Exception as e:
         print(f"Error fetching vermifugos data: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao carregar dados dos vermífugos")
+        raise HTTPException(
+            status_code=500, detail="Erro ao carregar dados dos vermífugos"
+        )
 
 
 @app.get("/api/vacinas/autocomplete")
@@ -816,28 +900,28 @@ def get_vaccines_autocomplete(
     try:
         if len(q) < 1:
             return {"suggestions": []}
-        
+
         # Busca vacinas que começam com o termo digitado
-        filter_query = {
-            "nome_vacina": {"$regex": f"^{q}", "$options": "i"}
-        }
-        
+        filter_query = {"nome_vacina": {"$regex": f"^{q}", "$options": "i"}}
+
         # Busca até 10 sugestões
-        vacinas = list(vaccines_collection.find(filter_query)
-                      .limit(10)
-                      .sort("nome_vacina", 1))
-        
+        vacinas = list(
+            vaccines_collection.find(filter_query).limit(10).sort("nome_vacina", 1)
+        )
+
         suggestions = []
         for vacina in vacinas:
-            suggestions.append({
-                "id": str(vacina["_id"]),
-                "nome": vacina["nome_vacina"],
-                "especie": vacina["especie_alvo"],
-                "tipo": vacina["tipo_vacina"]
-            })
-        
+            suggestions.append(
+                {
+                    "id": str(vacina["_id"]),
+                    "nome": vacina["nome_vacina"],
+                    "especie": vacina["especie_alvo"],
+                    "tipo": vacina["tipo_vacina"],
+                }
+            )
+
         return {"suggestions": suggestions}
-        
+
     except Exception as e:
         print(f"Error in vaccines autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
@@ -855,7 +939,7 @@ def get_ectoparasites_autocomplete(
     try:
         if len(q) < 1:
             return {"suggestions": []}
-        
+
         # Busca ectoparasitas que começam com o termo digitado ou contêm o termo
         filter_query = {
             "$or": [
@@ -863,40 +947,57 @@ def get_ectoparasites_autocomplete(
                 {"nome_praga": {"$regex": q, "$options": "i"}},
                 {"transmissor_de_doencas": {"$regex": q, "$options": "i"}},
                 {"sintomas_no_animal": {"$regex": q, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": q, "$options": "i"}}
+                {
+                    "medicamentos_de_combate.principios_ativos": {
+                        "$regex": q,
+                        "$options": "i",
+                    }
+                },
             ]
         }
-        
+
         # Busca até 10 sugestões
-        ectoparasitas = list(ectoparasites_collection.find(filter_query)
-                           .limit(10)
-                           .sort("nome_praga", 1))
-        
+        ectoparasitas = list(
+            ectoparasites_collection.find(filter_query).limit(10).sort("nome_praga", 1)
+        )
+
         suggestions = []
         for ectoparasita in ectoparasitas:
             especies = ", ".join(ectoparasita["especies_alvo"])
-            
+
             # Determina onde o termo foi encontrado para mostrar contexto
             match_context = ""
             if q.lower() in ectoparasita["nome_praga"].lower():
                 match_context = "Nome"
-            elif any(q.lower() in doenca.lower() for doenca in ectoparasita.get("transmissor_de_doencas", [])):
+            elif any(
+                q.lower() in doenca.lower()
+                for doenca in ectoparasita.get("transmissor_de_doencas", [])
+            ):
                 match_context = "Doença"
-            elif any(q.lower() in sintoma.lower() for sintoma in ectoparasita.get("sintomas_no_animal", [])):
+            elif any(
+                q.lower() in sintoma.lower()
+                for sintoma in ectoparasita.get("sintomas_no_animal", [])
+            ):
                 match_context = "Sintoma"
-            elif any(q.lower() in principio.lower() for medicamento in ectoparasita.get("medicamentos_de_combate", []) for principio in medicamento.get("principios_ativos", [])):
+            elif any(
+                q.lower() in principio.lower()
+                for medicamento in ectoparasita.get("medicamentos_de_combate", [])
+                for principio in medicamento.get("principios_ativos", [])
+            ):
                 match_context = "Princípio Ativo"
-            
-            suggestions.append({
-                "id": str(ectoparasita["_id"]),
-                "nome": ectoparasita["nome_praga"],
-                "especies": especies,
-                "tipo": ectoparasita["tipo_praga"],
-                "contexto": match_context
-            })
-        
+
+            suggestions.append(
+                {
+                    "id": str(ectoparasita["_id"]),
+                    "nome": ectoparasita["nome_praga"],
+                    "especies": especies,
+                    "tipo": ectoparasita["tipo_praga"],
+                    "contexto": match_context,
+                }
+            )
+
         return {"suggestions": suggestions}
-        
+
     except Exception as e:
         print(f"Error in ectoparasites autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
@@ -914,64 +1015,73 @@ def get_vermifugos_autocomplete(
     try:
         if len(q) < 1:
             return {"suggestions": []}
-        
+
         # Busca o documento principal que contém todos os vermífugos
         vermifugos_doc = vermifugos_collection.find_one()
-        
+
         if not vermifugos_doc:
             return {"suggestions": []}
-        
+
         vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
         suggestions = []
-        
+
         # Busca vermífugos que contenham o termo pesquisado
         for i, vermifugo in enumerate(vermifugos_list):
             q_lower = q.lower()
             match_found = False
             match_context = ""
-            
+
             # Verifica se o termo está no nome da praga
             if q_lower in vermifugo.get("nome_praga", "").lower():
                 match_found = True
                 match_context = "Nome"
-            
+
             # Verifica se o termo está no tipo de praga
             elif q_lower in vermifugo.get("tipo_praga", "").lower():
                 match_found = True
                 match_context = "Tipo"
-            
+
             # Verifica se o termo está nos sintomas
-            elif any(q_lower in sintoma.lower() for sintoma in vermifugo.get("sintomas_no_animal", [])):
+            elif any(
+                q_lower in sintoma.lower()
+                for sintoma in vermifugo.get("sintomas_no_animal", [])
+            ):
                 match_found = True
                 match_context = "Sintoma"
-            
+
             # Verifica se o termo está nos princípios ativos
-            elif any(q_lower in principio.lower() for med in vermifugo.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", [])):
+            elif any(
+                q_lower in principio.lower()
+                for med in vermifugo.get("medicamentos_de_combate", [])
+                for principio in med.get("principios_ativos", [])
+            ):
                 match_found = True
                 match_context = "Princípio Ativo"
-            
+
             # Verifica se o termo está nas observações
             elif q_lower in vermifugo.get("observacoes_adicionais", "").lower():
                 match_found = True
                 match_context = "Observações"
-            
+
             if match_found:
                 especies = ", ".join(vermifugo.get("especies_alvo", []))
-                
-                suggestions.append({
-                    "id": str(i),
-                    "nome": vermifugo.get("nome_praga", ""),
-                    "especies": especies,
-                    "tipo": vermifugo.get("tipo_praga", ""),
-                    "contexto": match_context
-                })
-                
+
+                suggestions.append(
+                    {
+                        "id": str(i),
+                        "nome": vermifugo.get("nome_praga", ""),
+                        "especies": especies,
+                        "tipo": vermifugo.get("tipo_praga", ""),
+                        "contexto": match_context,
+                    }
+                )
+
                 # Limita a 10 sugestões
                 if len(suggestions) >= 10:
                     break
-        
+
         return {"suggestions": suggestions}
-        
+
     except Exception as e:
         print(f"Error in vermifugos autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
@@ -1029,12 +1139,12 @@ def logout(request: Request):
         cache_key = f"user_{access_token[:20]}"
         if cache_key in user_cache:
             del user_cache[cache_key]
-    
+
     request.session.clear()
-    
+
     # URL de logout do Auth0 que força o usuário a digitar credenciais novamente
     auth0_logout_url = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={request.base_url}"
-    
+
     return RedirectResponse(url=auth0_logout_url)
 
 
@@ -1146,17 +1256,17 @@ def create_or_update_user_profile(
 # Pet Endpoints
 @app.get("/pets/form")
 def pet_form_page(
-    request: Request, 
+    request: Request,
     user: dict = Depends(get_current_user_info_from_session),
     error: str = Query(None),
-    pet_id: str = Query(None)
+    pet_id: str = Query(None),
 ):
     """
     Renderiza o formulário para adicionar um novo pet.
     """
     dog_breeds = get_dog_breeds_list()
     cat_breeds = get_cat_breeds_list()
-    
+
     # Busca pet para edição se pet_id for fornecido
     pet = None
     if pet_id:
@@ -1253,30 +1363,32 @@ def pet_profile_page(
                 except ValueError:
                     # Formato MM/DD/YYYY (formato americano)
                     birth_date = datetime.strptime(birth_date_str, "%m/%d/%Y").date()
-            
+
             # Formata a data para exibição (DD/MM/YYYY)
             pet["birth_date_formatted"] = birth_date.strftime("%d/%m/%Y")
-            
+
             # Calcula a idade
             today = datetime.now().date()
             age_years = today.year - birth_date.year
             age_months = today.month - birth_date.month
-            
+
             if age_months < 0:
                 age_years -= 1
                 age_months += 12
-            
+
             # Ajusta se o dia ainda não chegou
             if today.day < birth_date.day:
                 age_months -= 1
                 if age_months < 0:
                     age_years -= 1
                     age_months += 12
-            
+
             # Formata a idade
             if age_years > 0:
                 if age_months > 0:
-                    pet["age"] = f"{age_years} ano{'s' if age_years > 1 else ''} e {age_months} mês{'es' if age_months > 1 else ''}"
+                    pet["age"] = (
+                        f"{age_years} ano{'s' if age_years > 1 else ''} e {age_months} mês{'es' if age_months > 1 else ''}"
+                    )
                 else:
                     pet["age"] = f"{age_years} ano{'s' if age_years > 1 else ''}"
             else:
@@ -1297,7 +1409,7 @@ def pet_profile_page(
     for t in treatments:
         treatment_date = datetime.strptime(t.get("date"), "%Y-%m-%d").date()
         t["_id"] = str(t["_id"])  # Garante que o ID é string
-        
+
         # Formata a data para exibição (DD/MM/YYYY)
         t["date_formatted"] = treatment_date.strftime("%d/%m/%Y")
 
@@ -1379,9 +1491,9 @@ async def create_or_update_pet_from_form(
             # Redireciona com mensagem de erro user-friendly
             return RedirectResponse(
                 url=f"/pets/form?error={error_message}&pet_id={pet_id or ''}",
-                status_code=302
+                status_code=302,
             )
-        
+
         # Se for atualização, remove imagem antiga
         if pet_id:
             old_pet = pets_collection.find_one({"_id": ObjectId(pet_id)})
@@ -1395,7 +1507,7 @@ async def create_or_update_pet_from_form(
                         old_thumb_path.unlink()
                 except Exception:
                     pass  # Ignora erros ao remover arquivos antigos
-        
+
         # Salva nova imagem
         photo_data = save_image_with_thumbnail(photo, pet_id or "temp")
 
@@ -1413,7 +1525,7 @@ async def create_or_update_pet_from_form(
         # Lógica de atualização
         if photo_data:
             pet_data["photo"] = photo_data
-        
+
         result = pets_collection.update_one(
             {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
             {"$set": pet_data},
@@ -1423,7 +1535,7 @@ async def create_or_update_pet_from_form(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pet não encontrado ou você não tem permissão para editar.",
             )
-        
+
         # Move arquivo da pasta temporária para a pasta correta
         if photo_data and photo_data.get("original"):
             temp_path = Path(photo_data["original"])
@@ -1431,14 +1543,15 @@ async def create_or_update_pet_from_form(
                 final_path = UPLOAD_DIR / pet_id / temp_path.name
                 final_path.parent.mkdir(exist_ok=True)
                 shutil.move(str(temp_path), str(final_path))
-                
+
                 # Atualiza caminhos no banco
                 photo_data["original"] = str(final_path)
-                photo_data["thumbnail"] = str(final_path.parent / f"thumb_{temp_path.name}")
-                
+                photo_data["thumbnail"] = str(
+                    final_path.parent / f"thumb_{temp_path.name}"
+                )
+
                 pets_collection.update_one(
-                    {"_id": ObjectId(pet_id)},
-                    {"$set": {"photo": photo_data}}
+                    {"_id": ObjectId(pet_id)}, {"$set": {"photo": photo_data}}
                 )
     else:
         # Gera nickname único
@@ -1446,21 +1559,22 @@ async def create_or_update_pet_from_form(
         nickname = None
         attempts = 0
         max_attempts = 100
-        
+
         while nickname is None and attempts < max_attempts:
             random_code = "".join(random.choices("0123456789", k=4))
             candidate_nickname = f"{base_name}_{random_code}"
-            
+
             # Verifica se o nickname já existe
             existing_pet = pets_collection.find_one({"nickname": candidate_nickname})
             if not existing_pet:
                 nickname = candidate_nickname
             else:
                 attempts += 1
-        
+
         # Se não conseguiu gerar um nickname único, usa timestamp
         if nickname is None:
             import time
+
             timestamp = str(int(time.time()))[-6:]  # Últimos 6 dígitos do timestamp
             nickname = f"{base_name}_{timestamp}"
 
@@ -1468,32 +1582,44 @@ async def create_or_update_pet_from_form(
         pet_data["treatments"] = []
         pet_data["deleted_at"] = None
         pet_data["nickname"] = nickname
-        
+
         if photo_data:
             pet_data["photo"] = photo_data
-        
+
         result = pets_collection.insert_one(pet_data)
         if not result.inserted_id:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Falha ao criar pet.",
             )
-        
-        # Move arquivo da pasta temporária para a pasta correta
+
+        # Move arquivos da pasta temporária para a pasta correta
         if photo_data and photo_data.get("original"):
-            temp_path = Path(photo_data["original"])
-            if temp_path.exists():
-                final_path = UPLOAD_DIR / str(result.inserted_id) / temp_path.name
-                final_path.parent.mkdir(exist_ok=True)
-                shutil.move(str(temp_path), str(final_path))
-                
+            temp_original_path = Path(photo_data["original"])
+            temp_thumbnail_path = Path(photo_data["thumbnail"])
+
+            if temp_original_path.exists():
+                # Cria diretório do pet
+                pet_dir = UPLOAD_DIR / str(result.inserted_id)
+                pet_dir.mkdir(exist_ok=True)
+
+                # Paths finais
+                final_original_path = pet_dir / temp_original_path.name
+                final_thumbnail_path = pet_dir / temp_thumbnail_path.name
+
+                # Move arquivo original
+                shutil.move(str(temp_original_path), str(final_original_path))
+
+                # Move thumbnail se existir
+                if temp_thumbnail_path.exists():
+                    shutil.move(str(temp_thumbnail_path), str(final_thumbnail_path))
+
                 # Atualiza caminhos no banco
-                photo_data["original"] = str(final_path)
-                photo_data["thumbnail"] = str(final_path.parent / f"thumb_{temp_path.name}")
-                
+                photo_data["original"] = str(final_original_path)
+                photo_data["thumbnail"] = str(final_thumbnail_path)
+
                 pets_collection.update_one(
-                    {"_id": result.inserted_id},
-                    {"$set": {"photo": photo_data}}
+                    {"_id": result.inserted_id}, {"$set": {"photo": photo_data}}
                 )
 
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
@@ -1507,25 +1633,25 @@ def delete_pet_from_form(
     Realiza o soft delete de um pet.
     """
     user_id = user["id"]
-    
+
     # Busca o pet para verificar se tem fotos
     pet = pets_collection.find_one(
         {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
     )
-    
+
     if not pet:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pet não encontrado ou você não tem permissão para excluí-lo.",
         )
-    
+
     # Remove as imagens do pet
     if pet.get("photo"):
         try:
             delete_pet_images(pet_id)
         except Exception:
             pass  # Ignora erros ao remover arquivos
-    
+
     result = pets_collection.update_one(
         {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None},
         {"$set": {"deleted_at": datetime.now()}},
@@ -1550,7 +1676,8 @@ def add_treatment_page(
         raise HTTPException(status_code=404, detail="Pet not found.")
 
     return templates.TemplateResponse(
-        "treatment_form.html", {"request": request, "pet": pet, "treatment": None, "user_info": user["info"]}
+        "treatment_form.html",
+        {"request": request, "pet": pet, "treatment": None, "user_info": user["info"]},
     )
 
 
@@ -1570,13 +1697,13 @@ def create_or_update_treatment(
     done: bool = Form(False),
 ):
     user_id = user["id"]
-    
+
     # Se o usuário logado é um veterinário e applier_type é "Veterinarian",
     # adiciona automaticamente o veterinário à lista de usuários do pet
     if applier_type == "Veterinarian" and user["info"].get("is_vet", False):
         pets_collection.update_one(
             {"_id": ObjectId(pet_id), "deleted_at": None},
-            {"$addToSet": {"users": user_id}}
+            {"$addToSet": {"users": user_id}},
         )
 
     # Validações e criação do subdocumento
@@ -1647,7 +1774,13 @@ def edit_treatment_page(
     treatment["_id"] = str(treatment["_id"])
 
     return templates.TemplateResponse(
-        "treatment_form.html", {"request": request, "pet": pet, "treatment": treatment, "user_info": user["info"]}
+        "treatment_form.html",
+        {
+            "request": request,
+            "pet": pet,
+            "treatment": treatment,
+            "user_info": user["info"],
+        },
     )
 
 
@@ -1705,6 +1838,7 @@ def generate_pet_name(gender: str = Query(...)):
 
 # Rotas para gerenciamento de acesso de veterinários
 
+
 @app.get("/api/search-veterinarians")
 def search_veterinarians(
     request: Request,
@@ -1716,22 +1850,26 @@ def search_veterinarians(
     Apenas tutores podem buscar veterinários.
     """
     user_id = user["id"]
-    
+
     # Busca veterinários que contenham o termo de busca no nome
-    veterinarians_cursor = profiles_collection.find({
-        "is_vet": True,
-        "name": {"$regex": search, "$options": "i"},
-        "_id": {"$ne": user_id}  # Exclui o próprio usuário
-    }).limit(10)
-    
+    veterinarians_cursor = profiles_collection.find(
+        {
+            "is_vet": True,
+            "name": {"$regex": search, "$options": "i"},
+            "_id": {"$ne": user_id},  # Exclui o próprio usuário
+        }
+    ).limit(10)
+
     veterinarians = []
     for vet in veterinarians_cursor:
-        veterinarians.append({
-            "id": str(vet["_id"]),
-            "name": vet.get("name", "Sem nome"),
-            "email": vet.get("email", ""),
-        })
-    
+        veterinarians.append(
+            {
+                "id": str(vet["_id"]),
+                "name": vet.get("name", "Sem nome"),
+                "email": vet.get("email", ""),
+            }
+        )
+
     return JSONResponse(content={"veterinarians": veterinarians})
 
 
@@ -1746,42 +1884,42 @@ def grant_veterinarian_access(
     Apenas o tutor do pet pode conceder acesso.
     """
     user_id = user["id"]
-    
+
     # Verifica se o pet existe e se o usuário é o tutor
-    pet = pets_collection.find_one({
-        "_id": ObjectId(pet_id),
-        "users": user_id,
-        "deleted_at": None
-    })
-    
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
+
     if not pet:
-        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
-    
+        raise HTTPException(
+            status_code=404, detail="Pet não encontrado ou sem permissão."
+        )
+
     # Verifica se o veterinário existe
-    vet = profiles_collection.find_one({
-        "_id": veterinarian_id,
-        "is_vet": True
-    })
-    
+    vet = profiles_collection.find_one({"_id": veterinarian_id, "is_vet": True})
+
     if not vet:
         raise HTTPException(status_code=404, detail="Veterinário não encontrado.")
-    
+
     # Adiciona o veterinário à lista de usuários do pet
     result = pets_collection.update_one(
-        {"_id": ObjectId(pet_id)},
-        {"$addToSet": {"users": veterinarian_id}}
+        {"_id": ObjectId(pet_id)}, {"$addToSet": {"users": veterinarian_id}}
     )
-    
+
     if result.modified_count > 0:
-        return JSONResponse(content={
-            "success": True,
-            "message": f"Acesso concedido ao veterinário {vet.get('name', 'Sem nome')} com sucesso!"
-        })
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": f"Acesso concedido ao veterinário {vet.get('name', 'Sem nome')} com sucesso!",
+            }
+        )
     else:
-        return JSONResponse(content={
-            "success": True,
-            "message": "O veterinário já tinha acesso a este pet."
-        })
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "O veterinário já tinha acesso a este pet.",
+            }
+        )
 
 
 @app.post("/pets/{pet_id}/revoke-access")
@@ -1795,37 +1933,42 @@ def revoke_veterinarian_access(
     Apenas o tutor do pet pode remover acesso.
     """
     user_id = user["id"]
-    
+
     # Verifica se o pet existe e se o usuário é o tutor
-    pet = pets_collection.find_one({
-        "_id": ObjectId(pet_id),
-        "users": user_id,
-        "deleted_at": None
-    })
-    
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
+
     if not pet:
-        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
-    
+        raise HTTPException(
+            status_code=404, detail="Pet não encontrado ou sem permissão."
+        )
+
     # Não permite remover o próprio tutor
     if veterinarian_id == user_id:
-        raise HTTPException(status_code=400, detail="Você não pode remover seu próprio acesso.")
-    
+        raise HTTPException(
+            status_code=400, detail="Você não pode remover seu próprio acesso."
+        )
+
     # Remove o veterinário da lista de usuários do pet
     result = pets_collection.update_one(
-        {"_id": ObjectId(pet_id)},
-        {"$pull": {"users": veterinarian_id}}
+        {"_id": ObjectId(pet_id)}, {"$pull": {"users": veterinarian_id}}
     )
-    
+
     if result.modified_count > 0:
-        return JSONResponse(content={
-            "success": True,
-            "message": "Acesso do veterinário removido com sucesso!"
-        })
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Acesso do veterinário removido com sucesso!",
+            }
+        )
     else:
-        return JSONResponse(content={
-            "success": False,
-            "message": "Veterinário não tinha acesso a este pet."
-        })
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Veterinário não tinha acesso a este pet.",
+            }
+        )
 
 
 @app.get("/pets/{pet_id}/veterinarians")
@@ -1839,34 +1982,35 @@ def get_pet_veterinarians(
     Apenas o tutor do pet pode ver esta lista.
     """
     user_id = user["id"]
-    
+
     # Verifica se o pet existe e se o usuário é o tutor
-    pet = pets_collection.find_one({
-        "_id": ObjectId(pet_id),
-        "users": user_id,
-        "deleted_at": None
-    })
-    
+    pet = pets_collection.find_one(
+        {"_id": ObjectId(pet_id), "users": user_id, "deleted_at": None}
+    )
+
     if not pet:
-        raise HTTPException(status_code=404, detail="Pet não encontrado ou sem permissão.")
-    
+        raise HTTPException(
+            status_code=404, detail="Pet não encontrado ou sem permissão."
+        )
+
     # Busca todos os veterinários que têm acesso (exceto o tutor)
     veterinarian_ids = [uid for uid in pet.get("users", []) if uid != user_id]
-    
+
     veterinarians = []
     if veterinarian_ids:
-        vets_cursor = profiles_collection.find({
-            "_id": {"$in": veterinarian_ids},
-            "is_vet": True
-        })
-        
+        vets_cursor = profiles_collection.find(
+            {"_id": {"$in": veterinarian_ids}, "is_vet": True}
+        )
+
         for vet in vets_cursor:
-            veterinarians.append({
-                "id": str(vet["_id"]),
-                "name": vet.get("name", "Sem nome"),
-                "email": vet.get("email", ""),
-            })
-    
+            veterinarians.append(
+                {
+                    "id": str(vet["_id"]),
+                    "name": vet.get("name", "Sem nome"),
+                    "email": vet.get("email", ""),
+                }
+            )
+
     return JSONResponse(content={"veterinarians": veterinarians})
 
 
@@ -1880,7 +2024,7 @@ def get_vet_dashboard_page(
     try:
         is_authenticated = "access_token" in request.session
         user_id = user["id"]
-        
+
         # Busca pets que o veterinário tem acesso
         pets_cursor = pets_collection.find({"users": user_id, "deleted_at": None})
         pets_list = []
@@ -1915,26 +2059,23 @@ def search_pet_by_nickname(
     Busca um pet pelo nickname para veterinários visualizarem informações básicas.
     """
     try:
-        pet = pets_collection.find_one({
-            "nickname": nickname, 
-            "deleted_at": None
-        })
-        
+        pet = pets_collection.find_one({"nickname": nickname, "deleted_at": None})
+
         if not pet:
             return JSONResponse(
                 content={"success": False, "message": "Pet não encontrado."},
-                status_code=404
+                status_code=404,
             )
-        
+
         # Converte ObjectId para string
         pet["_id"] = str(pet["_id"])
         if "users" in pet:
             pet["users"] = [str(uid) for uid in pet["users"]]
-        
+
         # Remove dados sensíveis se o veterinário não tem acesso
         user_id = user["id"]
         has_access = user_id in pet.get("users", [])
-        
+
         if not has_access:
             # Remove informações detalhadas se não tem acesso
             pet = {
@@ -1946,7 +2087,7 @@ def search_pet_by_nickname(
                 "gender": pet.get("gender"),
                 "birth_date": pet.get("birth_date"),
                 "has_access": False,
-                "message": "Você não tem acesso ao histórico completo deste pet."
+                "message": "Você não tem acesso ao histórico completo deste pet.",
             }
         else:
             pet["has_access"] = True
@@ -1954,13 +2095,13 @@ def search_pet_by_nickname(
             if "treatments" in pet:
                 for treatment in pet["treatments"]:
                     treatment["_id"] = str(treatment["_id"])
-        
+
         return JSONResponse(content={"success": True, "pet": pet})
-        
+
     except Exception as e:
         return JSONResponse(
             content={"success": False, "message": "Erro ao buscar pet."},
-            status_code=500
+            status_code=500,
         )
 
 
@@ -1975,26 +2116,23 @@ def search_pet_by_id(
     (Mantido para compatibilidade)
     """
     try:
-        pet = pets_collection.find_one({
-            "_id": ObjectId(pet_id), 
-            "deleted_at": None
-        })
-        
+        pet = pets_collection.find_one({"_id": ObjectId(pet_id), "deleted_at": None})
+
         if not pet:
             return JSONResponse(
                 content={"success": False, "message": "Pet não encontrado."},
-                status_code=404
+                status_code=404,
             )
-        
+
         # Converte ObjectId para string
         pet["_id"] = str(pet["_id"])
         if "users" in pet:
             pet["users"] = [str(uid) for uid in pet["users"]]
-        
+
         # Remove dados sensíveis se o veterinário não tem acesso
         user_id = user["id"]
         has_access = user_id in pet.get("users", [])
-        
+
         if not has_access:
             # Remove informações detalhadas se não tem acesso
             pet = {
@@ -2006,7 +2144,7 @@ def search_pet_by_id(
                 "gender": pet.get("gender"),
                 "birth_date": pet.get("birth_date"),
                 "has_access": False,
-                "message": "Você não tem acesso ao histórico completo deste pet."
+                "message": "Você não tem acesso ao histórico completo deste pet.",
             }
         else:
             pet["has_access"] = True
@@ -2014,11 +2152,11 @@ def search_pet_by_id(
             if "treatments" in pet:
                 for treatment in pet["treatments"]:
                     treatment["_id"] = str(treatment["_id"])
-        
+
         return JSONResponse(content={"success": True, "pet": pet})
-        
+
     except Exception as e:
         return JSONResponse(
             content={"success": False, "message": "Erro ao buscar pet."},
-            status_code=500
+            status_code=500,
         )
