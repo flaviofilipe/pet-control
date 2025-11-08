@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Mensal de Tratamentos</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px 10px 0 0;
+            margin: -30px -30px 30px -30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 26px;
+        }
+        .header .subtitle {
+            margin: 10px 0 0 0;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        .pet-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #4a90e2;
+        }
+        .pet-name {
+            font-size: 22px;
+            font-weight: bold;
+            color: #4a90e2;
+            margin-bottom: 5px;
+        }
+        .pet-nickname {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .summary-banner {
+            background-color: #e3f2fd;
+            border: 2px solid #2196f3;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2196f3;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .treatments-section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            color: #333;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .section-icon {
+            margin-right: 10px;
+            font-size: 24px;
+        }
+        .treatment-card {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: box-shadow 0.3s ease;
+        }
+        .treatment-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .treatment-card.expired {
+            border-left: 4px solid #dc3545;
+            background-color: #fdf2f2;
+        }
+        .treatment-card.scheduled {
+            border-left: 4px solid #28a745;
+            background-color: #f8fff8;
+        }
+        .treatment-title {
+            font-weight: bold;
+            color: #495057;
+            font-size: 18px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .treatment-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+        }
+        .status-scheduled {
+            background-color: #28a745;
+        }
+        .status-expired {
+            background-color: #dc3545;
+        }
+        .treatment-detail {
+            margin: 8px 0;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+        }
+        .treatment-detail strong {
+            color: #495057;
+            margin-right: 8px;
+            min-width: 80px;
+        }
+        .treatment-detail .icon {
+            margin-right: 8px;
+            width: 16px;
+        }
+        .category-badge {
+            display: inline-block;
+            background-color: #4a90e2;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .expired-alert {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .no-treatments {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .contact-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        .contact-info h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .date-format {
+            font-family: monospace;
+            background-color: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Relatório Mensal de Tratamentos</h1>
+            <div class="subtitle">{{ current_month }}</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <p>Olá <strong>{{ tutor_name }}</strong>,</p>
+            <p>Este é o relatório mensal dos tratamentos do seu pet, incluindo os agendados para este mês e aqueles que precisam de atenção.</p>
+        </div>
+
+        <div class="pet-info">
+            <div class="pet-name">{{ pet_name }}</div>
+            <div class="pet-nickname">Apelido: {{ pet_nickname }}</div>
+        </div>
+
+        <div class="summary-banner">
+            <h3 style="margin: 0 0 15px 0; color: #2196f3;">📊 Resumo do Relatório</h3>
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <div class="stat-number">{{ total_current_treatments }}</div>
+                    <div class="stat-label">Agendados este Mês</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ total_expired_treatments }}</div>
+                    <div class="stat-label">Tratamentos Expirados</div>
+                </div>
+            </div>
+        </div>
+
+        {% if has_current_treatments %}
+        <div class="treatments-section">
+            <h3 class="section-title">
+                <span class="section-icon">📅</span>
+                Tratamentos Agendados para {{ current_month }} ({{ total_current_treatments }})
+            </h3>
+            
+            {% for treatment in current_month_treatments %}
+            <div class="treatment-card scheduled">
+                <div class="category-badge">{{ treatment.category }}</div>
+                <div class="treatment-title">
+                    <span>{{ treatment.name }}</span>
+                    <span class="treatment-status status-scheduled">{{ treatment.status }}</span>
+                </div>
+                
+                {% if treatment.description %}
+                <div class="treatment-detail">
+                    <span class="icon">📋</span>
+                    <strong>Descrição:</strong> {{ treatment.description }}
+                </div>
+                {% endif %}
+                
+                <div class="treatment-detail">
+                    <span class="icon">📅</span>
+                    <strong>Data:</strong> <span class="date-format">{{ treatment.date }}</span>
+                </div>
+                
+                <div class="treatment-detail">
+                    <span class="icon">⏰</span>
+                    <strong>Horário:</strong> {{ treatment.time }}
+                </div>
+                
+                <div class="treatment-detail">
+                    <span class="icon">👨‍⚕️</span>
+                    <strong>Responsável:</strong> {{ treatment.applier_type }}
+                    {% if treatment.applier_name %}
+                        - {{ treatment.applier_name }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="treatments-section">
+            <h3 class="section-title">
+                <span class="section-icon">📅</span>
+                Tratamentos Agendados para {{ current_month }}
+            </h3>
+            <div class="no-treatments">
+                ✅ Nenhum tratamento agendado para este mês.
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_expired_treatments %}
+        <div class="treatments-section">
+            <h3 class="section-title">
+                <span class="section-icon">⚠️</span>
+                Tratamentos Expirados que Precisam de Atenção ({{ total_expired_treatments }})
+            </h3>
+            
+            {% for treatment in expired_treatments %}
+            <div class="treatment-card expired">
+                <div class="expired-alert">
+                    ⚠️ Este tratamento está {{ treatment.days_late }} dia{{ 's' if treatment.days_late != 1 else '' }} atrasado!
+                </div>
+                
+                <div class="category-badge" style="background-color: #dc3545;">{{ treatment.category }}</div>
+                <div class="treatment-title">
+                    <span>{{ treatment.name }}</span>
+                    <span class="treatment-status status-expired">{{ treatment.status }}</span>
+                </div>
+                
+                {% if treatment.description %}
+                <div class="treatment-detail">
+                    <span class="icon">📋</span>
+                    <strong>Descrição:</strong> {{ treatment.description }}
+                </div>
+                {% endif %}
+                
+                <div class="treatment-detail">
+                    <span class="icon">📅</span>
+                    <strong>Data Prevista:</strong> <span class="date-format">{{ treatment.date }}</span>
+                </div>
+                
+                <div class="treatment-detail">
+                    <span class="icon">⏰</span>
+                    <strong>Horário:</strong> {{ treatment.time }}
+                </div>
+                
+                <div class="treatment-detail">
+                    <span class="icon">👨‍⚕️</span>
+                    <strong>Responsável:</strong> {{ treatment.applier_type }}
+                    {% if treatment.applier_name %}
+                        - {{ treatment.applier_name }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="treatments-section">
+            <h3 class="section-title">
+                <span class="section-icon">✅</span>
+                Tratamentos Expirados
+            </h3>
+            <div class="no-treatments">
+                ✅ Parabéns! Nenhum tratamento em atraso.
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_expired_treatments %}
+        <div class="contact-info">
+            <h4>📞 Tratamentos em Atraso - Ação Necessária!</h4>
+            <p><strong>Atenção:</strong> Foram encontrados tratamentos em atraso que precisam ser reagendados ou realizados.</p>
+            <p>Entre em contato com seu veterinário o quanto antes para:</p>
+            <ul>
+                <li>Reagendar os tratamentos pendentes</li>
+                <li>Verificar se ainda são necessários</li>
+                <li>Atualizar o status no sistema</li>
+            </ul>
+        </div>
+        {% else %}
+        <div class="contact-info">
+            <h4>📞 Precisa de ajuda?</h4>
+            <p>Se você precisar reagendar algum tratamento ou tiver dúvidas, entre em contato com o seu veterinário ou acesse nossa plataforma.</p>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p><strong>Pet Control System</strong></p>
+            <p>Este é um relatório automático mensal. Não responda a este email.</p>
+            <p>Relatório gerado automaticamente</p>
+        </div>
+    </div>
+</body>
+</html>

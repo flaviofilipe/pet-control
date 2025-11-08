@@ -37,6 +37,19 @@ class Database:
             print(f"Could not connect to MongoDB: {e}")
             raise ConnectionError("Failed to connect to MongoDB.")
     
+    def connect(self):
+        """Método público para conectar (se já não estiver conectado)"""
+        if not self.client:
+            self._connect()
+        return self
+    
+    def close(self):
+        """Fecha a conexão com MongoDB"""
+        if self.client:
+            self.client.close()
+            self.client = None
+            self.db = None
+    
     @property
     def profiles_collection(self):
         return self.db[COLLECTION_NAME]

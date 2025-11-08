@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from .base_repository import BaseRepository
 from ..database import database
 
@@ -152,3 +152,135 @@ class PetRepository(BaseRepository):
             return result.matched_count > 0 and result.modified_count > 0
         except:
             return False
+    
+    def get_scheduled_treatments_for_date(self, target_date: str) -> List[Dict[str, Any]]:
+        """
+        Busca todos os tratamentos agendados para uma data específica
+        target_date: data no formato "YYYY-MM-DD"
+        Retorna lista de pets com seus tratamentos agendados
+        """
+        try:
+            # Busca pets não deletados que têm tratamentos na data alvo
+            pipeline = [
+                {"$match": {"deleted_at": None}},
+                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
+                {"$match": {
+                    "treatments.date": target_date,
+                    "treatments.done": False
+                }},
+                {"$group": {
+                    "_id": "$_id",
+                    "name": {"$first": "$name"},
+                    "nickname": {"$first": "$nickname"},
+                    "users": {"$first": "$users"},
+                    "treatments": {"$push": "$treatments"}
+                }}
+            ]
+            
+            results = list(self.collection.aggregate(pipeline))
+            
+            # Converte ObjectIds para strings
+            for result in results:
+                result["_id"] = str(result["_id"])
+                result["users"] = [str(user_id) for user_id in result["users"]]
+                for treatment in result["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+            
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar tratamentos agendados: {e}")
+            return []
+    
+    def get_tomorrow_scheduled_treatments(self) -> List[Dict[str, Any]]:
+        """
+        Busca todos os tratamentos agendados para amanhã
+        Retorna lista de pets com seus tratamentos agendados
+        """
+        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+        return self.get_scheduled_treatments_for_date(tomorrow_str)
+    
+    def get_current_month_treatments(self) -> List[Dict[str, Any]]:
+        """
+        Busca todos os tratamentos agendados para o mês atual
+        Retorna lista de pets com seus tratamentos agendados
+        """
+        try:
+            # Primeiro e último dia do mês atual
+            now = datetime.now()
+            first_day = now.replace(day=1).strftime("%Y-%m-%d")
+            if now.month == 12:
+                last_day = now.replace(year=now.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                last_day = now.replace(month=now.month + 1, day=1) - timedelta(days=1)
+            last_day_str = last_day.strftime("%Y-%m-%d")
+            
+            # Pipeline para buscar tratamentos do mês
+            pipeline = [
+                {"$match": {"deleted_at": None}},
+                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
+                {"$match": {
+                    "treatments.date": {"$gte": first_day, "$lte": last_day_str},
+                    "treatments.done": False
+                }},
+                {"$group": {
+                    "_id": "$_id",
+                    "name": {"$first": "$name"},
+                    "nickname": {"$first": "$nickname"},
+                    "users": {"$first": "$users"},
+                    "treatments": {"$push": "$treatments"}
+                }}
+            ]
+            
+            results = list(self.collection.aggregate(pipeline))
+            
+            # Converte ObjectIds para strings
+            for result in results:
+                result["_id"] = str(result["_id"])
+                result["users"] = [str(user_id) for user_id in result["users"]]
+                for treatment in result["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+            
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar tratamentos do mês: {e}")
+            return []
+    
+    def get_expired_treatments(self) -> List[Dict[str, Any]]:
+        """
+        Busca todos os tratamentos expirados (data anterior a hoje e não concluídos)
+        Retorna lista de pets com seus tratamentos expirados
+        """
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # Pipeline para buscar tratamentos expirados
+            pipeline = [
+                {"$match": {"deleted_at": None}},
+                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
+                {"$match": {
+                    "treatments.date": {"$lt": today},
+                    "treatments.done": False
+                }},
+                {"$group": {
+                    "_id": "$_id",
+                    "name": {"$first": "$name"},
+                    "nickname": {"$first": "$nickname"},
+                    "users": {"$first": "$users"},
+                    "treatments": {"$push": "$treatments"}
+                }}
+            ]
+            
+            results = list(self.collection.aggregate(pipeline))
+            
+            # Converte ObjectIds para strings
+            for result in results:
+                result["_id"] = str(result["_id"])
+                result["users"] = [str(user_id) for user_id in result["users"]]
+                for treatment in result["treatments"]:
+                    treatment["_id"] = str(treatment["_id"])
+            
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar tratamentos expirados: {e}")
+            return []

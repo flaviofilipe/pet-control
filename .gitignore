@@ -10,3 +10,23 @@ wheels/
 .venv
 .env
 uploads/
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Testing
+.pytest_cache/
+.tox/
+
+# Temporary files
+*.tmp
+*.temp
+debug_*.py
+fix_*.py
+update_*.py
+test_task_*.py

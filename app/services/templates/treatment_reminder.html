@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lembrete de Tratamentos</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            margin: -30px -30px 30px -30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .pet-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        .pet-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .pet-nickname {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .date-banner {
+            background-color: #e7f3ff;
+            border: 2px solid #0066cc;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .date-banner strong {
+            color: #0066cc;
+            font-size: 18px;
+        }
+        .treatments-section h3 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .treatment-card {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .treatment-title {
+            font-weight: bold;
+            color: #495057;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .treatment-detail {
+            margin: 5px 0;
+            color: #6c757d;
+        }
+        .treatment-detail strong {
+            color: #495057;
+        }
+        .category-badge {
+            display: inline-block;
+            background-color: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .contact-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .contact-info h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .icon {
+            display: inline-block;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐾 Lembrete de Tratamentos</h1>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <p>Olá <strong>{{ tutor_name }}</strong>,</p>
+            <p>Este é um lembrete automático sobre os tratamentos agendados para o seu pet amanhã.</p>
+        </div>
+
+        <div class="pet-info">
+            <div class="pet-name">{{ pet_name }}</div>
+            <div class="pet-nickname">Apelido: {{ pet_nickname }}</div>
+        </div>
+
+        <div class="date-banner">
+            <strong>📅 Data dos Tratamentos: {{ date }}</strong>
+        </div>
+
+        <div class="treatments-section">
+            <h3>🏥 Tratamentos Agendados ({{ total_treatments }})</h3>
+            
+            {% for treatment in treatments %}
+            <div class="treatment-card">
+                <div class="category-badge">{{ treatment.category }}</div>
+                <div class="treatment-title">{{ treatment.name }}</div>
+                
+                {% if treatment.description %}
+                <div class="treatment-detail">
+                    <strong>📋 Descrição:</strong> {{ treatment.description }}
+                </div>
+                {% endif %}
+                
+                <div class="treatment-detail">
+                    <strong>⏰ Horário:</strong> {{ treatment.time }}
+                </div>
+                
+                <div class="treatment-detail">
+                    <strong>👨‍⚕️ Responsável:</strong> {{ treatment.applier_type }}
+                    {% if treatment.applier_name %}
+                        - {{ treatment.applier_name }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="contact-info">
+            <h4>📞 Precisa de ajuda?</h4>
+            <p>Se você precisar reagendar ou tiver dúvidas sobre algum tratamento, entre em contato com o seu veterinário ou acesse nossa plataforma.</p>
+        </div>
+
+        <div class="footer">
+            <p><strong>Pet Control System</strong></p>
+            <p>Este é um email automático. Não responda a este email.</p>
+            <p>Lembrete enviado automaticamente</p>
+        </div>
+    </div>
+</body>
+</html>

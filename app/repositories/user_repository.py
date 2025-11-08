@@ -36,3 +36,28 @@ class UserRepository(BaseRepository):
         if not vet_ids:
             return []
         return self.find({"_id": {"$in": vet_ids}, "is_vet": True})
+    
+    def get_users_by_ids(self, user_ids: List[str]) -> List[Dict[str, Any]]:
+        """Busca usuários por lista de IDs"""
+        if not user_ids:
+            return []
+        return self.find({"_id": {"$in": user_ids}})
+    
+    def get_user_emails_by_ids(self, user_ids: List[str]) -> List[Dict[str, str]]:
+        """
+        Busca emails dos usuários por lista de IDs
+        Retorna lista com id, name e email
+        """
+        if not user_ids:
+            return []
+        
+        users = self.find({"_id": {"$in": user_ids}})
+        return [
+            {
+                "id": user["_id"],
+                "name": user.get("name", "Usuário"),
+                "email": user.get("email", "")
+            }
+            for user in users
+            if user.get("email")  # Só inclui usuários com email
+        ]
