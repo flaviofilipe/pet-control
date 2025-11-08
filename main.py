@@ -36,7 +36,7 @@ from PIL import Image
 import io
 
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.WARNING)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -83,7 +83,9 @@ try:
     vaccines_collection = db[VACCINES_COLLECTION_NAME]
     ectoparasites_collection = db[ECTOPARASITES_COLLECTION_NAME]
     vermifugos_collection = db[VERMIFUGOS_COLLECTION_NAME]
-    client.admin.command("ismaster")
+    # Testa conexão - skip em ambiente de teste (mongomock)
+    if not str(client).startswith('mongomock'):
+        client.admin.command("ismaster")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
     raise ConnectionError("Failed to connect to MongoDB.")

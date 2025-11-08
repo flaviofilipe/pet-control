@@ -1,39 +1,187 @@
+# Removido build-system para simplificar
+# [build-system] 
+# requires = ["hatchling"]
+# build-backend = "hatchling.build"
+
 [project]
-name = "pet-app"
+name = "pet-control"
 version = "1.0.0"
-description = "Sistema de gerenciamento de pets com upload de fotos"
-authors = [
-    {name = "Pet App Team", email = "team@petapp.com"}
-]
+description = "Sistema de controle veterinário para pets"
 readme = "README.md"
-requires-python = ">=3.8.1"
+requires-python = ">=3.9"
+authors = [
+    {name = "Pet Control Team"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
-    "python-multipart>=0.0.6",
     "python-dotenv>=1.0.0",
-    "pymongo>=4.6.0",
-    "faker>=20.0.0",
-    "faker-food>=0.3.0",
-    "Pillow>=10.0.0",
+    "pymongo>=4.5.0",
+    "pydantic>=2.0.0",
     "requests>=2.31.0",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.2",
+    "aiofiles>=23.2.1",
+    "pillow>=10.0.0",
+    "faker>=19.0.0",
+    "faker-food>=0.3.0",
     "itsdangerous>=2.2.0",
-    "jinja2>=3.1.6",
 ]
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1", 
+    "pytest-mock>=3.12.0",
+    "pytest-cov>=4.1.0",
+    "pytest-html>=4.1.1",
+    "pytest-xdist>=3.3.1",
+    "httpx>=0.25.2",
+    "mongomock>=4.1.2",
+    "factory-boy>=3.3.1",
+    "freezegun>=1.2.2",
+    "responses>=0.24.1",
+    "fakeredis>=2.20.1",
+]
+dev = [
     "black>=23.0.0",
     "isort>=5.12.0",
-    "flake8>=7.0.0",
+    "flake8>=5.0.0",
+    "pylint>=3.0.0",
+    "mypy>=1.5.0",
+]
+all = [
+    "pet-control[test,dev]"
 ]
 
+[project.urls]
+Homepage = "https://github.com/pet-control/pet-app"
+Documentation = "https://github.com/pet-control/pet-app/blob/main/TESTING.md"
+Repository = "https://github.com/pet-control/pet-app.git"
+Issues = "https://github.com/pet-control/pet-app/issues"
+
+[project.scripts]
+pet-control = "main:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*", "*Tests"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config", 
+    "--verbose",
+    "--tb=short",
+    "--cov=main",
+    "--cov-report=html:htmlcov",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
+    "--cov-fail-under=80",
+    "--durations=10",
+]
+markers = [
+    "unit: Testes unitários",
+    "integration: Testes de integração", 
+    "auth: Testes de autenticação",
+    "api: Testes de API",
+    "database: Testes que usam banco de dados",
+    "slow: Testes que demoram mais para executar",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore:.*unclosed.*:ResourceWarning",
+]
+
+[tool.coverage.run]
+source = ["main.py"]
+omit = [
+    "tests/*",
+    "test_*.py", 
+    "*_test.py",
+    "conftest.py",
+    "setup.py",
+    "venv/*",
+    ".venv/*",
+    "env/*",
+    ".env/*",
+    "*/migrations/*",
+    "*/static/*",
+    "*/media/*",
+    "*/uploads/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if settings.DEBUG",
+    "logging.error",
+    "print.*Error",
+]
+ignore_errors = true
+show_missing = true
+precision = 2
+skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "Pet Control - Relatório de Cobertura"
+
 [tool.black]
-line-length = 88
+line-length = 100
 target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
 
 [tool.isort]
 profile = "black"
-line_length = 88
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.pylint.messages_control]
+disable = ["C0111", "C0103", "R0903", "R0801"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Temporário - melhorar gradualmente
+ignore_missing_imports = true
