@@ -235,7 +235,7 @@ class TestProfileModels:
 
     def test_user_address_model(self):
         """Testa o modelo UserAddress."""
-        from main import UserAddress
+        from app.models import UserAddress
         
         # Endereço completo
         address = UserAddress(
@@ -257,7 +257,7 @@ class TestProfileModels:
 
     def test_user_profile_model(self):
         """Testa o modelo UserProfile."""
-        from main import UserProfile, UserAddress
+        from app.models import UserProfile, UserAddress
         
         address = UserAddress(
             street="123 Test St",
@@ -282,7 +282,7 @@ class TestProfileModels:
 
     def test_user_profile_defaults(self):
         """Testa valores padrão do modelo UserProfile."""
-        from main import UserProfile
+        from app.models import UserProfile
         
         # Perfil mínimo (apenas nome obrigatório)
         profile = UserProfile(name="Minimal User")
@@ -295,7 +295,7 @@ class TestProfileModels:
 
     def test_profile_serialization(self):
         """Testa serialização do modelo de perfil."""
-        from main import UserProfile, UserAddress
+        from app.models import UserProfile, UserAddress
         
         address = UserAddress(
             street="123 Test St",

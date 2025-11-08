@@ -270,7 +270,7 @@ class TestTreatmentModels:
 
     def test_treatment_model_complete(self):
         """Testa modelo Treatment completo."""
-        from main import Treatment
+        from app.models import Treatment
         from bson import ObjectId
         
         treatment_id = ObjectId()
@@ -296,7 +296,7 @@ class TestTreatmentModels:
 
     def test_treatment_model_minimal(self):
         """Testa modelo Treatment com campos mínimos."""
-        from main import Treatment
+        from app.models import Treatment
         from bson import ObjectId
         
         treatment = Treatment(
@@ -315,7 +315,7 @@ class TestTreatmentModels:
 
     def test_treatment_category_literal(self):
         """Testa valores válidos para categoria."""
-        from main import Treatment
+        from app.models import Treatment
         from bson import ObjectId
         
         valid_categories = ["Vacinas", "Ectoparasitas", "Vermífugo", "Tratamentos"]
@@ -332,7 +332,7 @@ class TestTreatmentModels:
 
     def test_treatment_applier_type_literal(self):
         """Testa valores válidos para tipo de aplicador."""
-        from main import Treatment
+        from app.models import Treatment
         from bson import ObjectId
         
         valid_applier_types = ["Veterinarian", "Tutor"]
@@ -349,7 +349,7 @@ class TestTreatmentModels:
 
     def test_treatment_serialization(self):
         """Testa serialização do modelo Treatment."""
-        from main import Treatment
+        from app.models import Treatment
         from bson import ObjectId
         
         treatment = Treatment(

@@ -308,7 +308,8 @@ class TestInfoPagesAuthentication:
         # Handle TestClient routing issue - if 404, test function directly
         if response.status_code == 404:
             # Test the vaccines function directly without auth
-            from main import get_vaccines_page, get_current_user_info_from_session
+            from app.routes.info_routes import get_vaccines_page
+            from app.services.auth_service import AuthService
             from unittest.mock import MagicMock
             import pytest
             from fastapi import HTTPException
@@ -317,7 +318,7 @@ class TestInfoPagesAuthentication:
             mock_request.session = {}  # Empty session (no auth)
             
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user_info_from_session(mock_request)
+                AuthService.get_current_user_info_from_session(mock_request)
             
             assert exc_info.value.status_code == 401
         else:
@@ -330,7 +331,7 @@ class TestInfoPagesAuthentication:
         
         # Handle TestClient routing issue
         if response.status_code == 404:
-            from main import get_current_user_info_from_session
+            from app.services.auth_service import AuthService
             from unittest.mock import MagicMock
             import pytest
             from fastapi import HTTPException
@@ -339,7 +340,7 @@ class TestInfoPagesAuthentication:
             mock_request.session = {}
             
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user_info_from_session(mock_request)
+                AuthService.get_current_user_info_from_session(mock_request)
             
             assert exc_info.value.status_code == 401
         else:
@@ -351,7 +352,7 @@ class TestInfoPagesAuthentication:
         
         # Handle TestClient routing issue
         if response.status_code == 404:
-            from main import get_current_user_info_from_session
+            from app.services.auth_service import AuthService
             from unittest.mock import MagicMock
             import pytest
             from fastapi import HTTPException
@@ -360,7 +361,7 @@ class TestInfoPagesAuthentication:
             mock_request.session = {}
             
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user_info_from_session(mock_request)
+                AuthService.get_current_user_info_from_session(mock_request)
             
             assert exc_info.value.status_code == 401
         else:
@@ -372,7 +373,7 @@ class TestInfoPagesAuthentication:
         
         # Handle TestClient routing issue
         if response.status_code == 404:
-            from main import get_current_user_info_from_session
+            from app.services.auth_service import AuthService
             from unittest.mock import MagicMock
             import pytest
             from fastapi import HTTPException
@@ -381,7 +382,7 @@ class TestInfoPagesAuthentication:
             mock_request.session = {}
             
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user_info_from_session(mock_request)
+                AuthService.get_current_user_info_from_session(mock_request)
             
             assert exc_info.value.status_code == 401
         else:

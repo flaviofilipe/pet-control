@@ -14,7 +14,7 @@ class TestAuth:
     def test_login_redirect(self, client):
         """Testa se o login redireciona corretamente para o Auth0."""
         # Try to call the login function directly first to verify it works
-        from main import login
+        from app.routes.auth_routes import login
         
         # Test direct function call
         direct_result = login()
@@ -39,7 +39,7 @@ class TestAuth:
             assert "authorize" in response.headers["location"]
             assert "prompt=login" in response.headers["location"]
 
-    @patch("main.requests.post")
+    @patch("app.services.auth_service.requests.post")
     def test_callback_success(self, mock_post, client, mock_auth0_responses):
         """Testa o callback bem-sucedido do Auth0."""
         # Mock da resposta do Auth0 token exchange
@@ -53,7 +53,7 @@ class TestAuth:
         # Handle the TestClient routing issue
         if response.status_code == 404:
             # Test the callback function directly
-            from main import callback
+            from app.routes.auth_routes import callback
             
             mock_request = MagicMock()
             mock_request.session = {}
@@ -74,7 +74,7 @@ class TestAuth:
             # Verifica se a requisição foi feita corretamente
             mock_post.assert_called_once()
 
-    @patch("main.requests.post")
+    @patch("app.services.auth_service.requests.post")
     def test_callback_failure(self, mock_post, client):
         """Testa o callback com falha na troca de tokens."""
         # Mock de erro na requisição
@@ -85,7 +85,7 @@ class TestAuth:
         # Handle TestClient routing issue
         if response.status_code == 404:
             # Test callback function directly
-            from main import callback
+            from app.routes.auth_routes import callback
             
             mock_request = MagicMock()
             mock_request.session = {}
@@ -110,7 +110,7 @@ class TestAuth:
             # Handle TestClient routing issue
             if response.status_code == 404:
                 # Test logout function directly
-                from main import logout
+                from app.routes.auth_routes import logout
                 
                 mock_request = MagicMock()
                 mock_request.session = {"access_token": "test-token"}
@@ -129,10 +129,10 @@ class TestAuth:
                 assert "auth0" in response.headers["location"]
                 assert "logout" in response.headers["location"]
 
-    @patch("main.requests.get")
+    @patch("app.services.auth_service.requests.get")
     def test_get_user_info_success(self, mock_get, mock_auth0_responses):
         """Testa a obtenção de informações do usuário com sucesso."""
-        from main import get_current_user_info_from_header
+        from app.services.auth_service import AuthService
         
         # Mock da resposta do Auth0 userinfo
         mock_response = MagicMock()
@@ -140,46 +140,46 @@ class TestAuth:
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
         
-        result = get_current_user_info_from_header("Bearer test-token")
+        result = AuthService.get_current_user_info_from_header("Bearer test-token")
         
         assert result["id"] == "auth0|test-user-id"
         assert result["info"]["email"] == "test@example.com"
 
-    @patch("main.requests.get")
+    @patch("app.services.auth_service.requests.get")
     def test_get_user_info_invalid_token(self, mock_get):
         """Testa a obtenção de informações com token inválido."""
-        from main import get_current_user_info_from_header
+        from app.services.auth_service import AuthService
         
         # Mock de erro 401
         mock_get.side_effect = requests.exceptions.HTTPError("Unauthorized")
         
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user_info_from_header("Bearer invalid-token")
+            AuthService.get_current_user_info_from_header("Bearer invalid-token")
         
         assert exc_info.value.status_code == 401
 
     def test_invalid_authorization_header(self):
         """Testa header de autorização inválido."""
-        from main import get_current_user_info_from_header
+        from app.services.auth_service import AuthService
         
         # Sem Bearer
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user_info_from_header("invalid-header")
+            AuthService.get_current_user_info_from_header("invalid-header")
         
         assert exc_info.value.status_code == 401
         assert "Invalid or missing Authorization header" in exc_info.value.detail
         
         # Header vazio
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user_info_from_header("")
+            AuthService.get_current_user_info_from_header("")
         
         assert exc_info.value.status_code == 401
 
-    @patch("main.requests.get")
-    @patch("main.requests.post")
+    @patch("app.services.auth_service.requests.get")
+    @patch("app.services.auth_service.requests.post")
     def test_token_refresh_success(self, mock_post, mock_get, client, mock_auth0_responses):
         """Testa a renovação automática de token."""
-        from main import get_current_user_info_from_session
+        from app.services.auth_service import AuthService
         
         # Create a simple class to simulate a response
         class MockResponse:
@@ -231,7 +231,7 @@ class TestAuth:
             "refresh_token": "valid-refresh-token"
         }
         
-        result = get_current_user_info_from_session(mock_request)
+        result = AuthService.get_current_user_info_from_session(mock_request)
         
         # Ensure we got a valid result, not a mock
         assert isinstance(result, dict)
@@ -241,21 +241,21 @@ class TestAuth:
 
     def test_session_dependency_no_token(self):
         """Testa dependência de sessão sem token."""
-        from main import get_current_user_info_from_session
+        from app.services.auth_service import AuthService
         
         mock_request = MagicMock()
         mock_request.session = {}
         
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user_info_from_session(mock_request)
+            AuthService.get_current_user_info_from_session(mock_request)
         
         assert exc_info.value.status_code == 401
         assert "Not authenticated" in exc_info.value.detail
 
-    @patch("main.requests.get")
+    @patch("app.services.auth_service.requests.get")
     def test_session_dependency_timeout(self, mock_get):
         """Testa timeout na validação de sessão."""
-        from main import get_current_user_info_from_session
+        from app.services.auth_service import AuthService
         
         mock_get.side_effect = requests.exceptions.Timeout("Request timeout")
         
@@ -263,13 +263,14 @@ class TestAuth:
         mock_request.session = {"access_token": "test-token"}
         
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user_info_from_session(mock_request)
+            AuthService.get_current_user_info_from_session(mock_request)
         
         assert exc_info.value.status_code == 408
 
     def test_user_cache_functionality(self):
         """Testa o cache de usuários."""
-        from main import user_cache, clear_user_cache
+        from app.services.auth_service import user_cache
+        from app.services.auth_service import AuthService
         
         # Adiciona algo ao cache
         user_cache["test_key"] = ({"id": "test-user"}, 1234567890)
@@ -278,31 +279,32 @@ class TestAuth:
         assert "test_key" in user_cache
         
         # Limpa o cache
-        clear_user_cache()
+        AuthService.clear_user_cache()
         
         # Verifica se foi limpo
         assert len(user_cache) == 0
 
     def test_clear_specific_user_cache(self):
         """Testa limpeza específica do cache por usuário."""
-        from main import user_cache, clear_user_cache
+        from app.services.auth_service import user_cache
+        from app.services.auth_service import AuthService
         
         # Adiciona múltiplos usuários ao cache
         user_cache["user_token1"] = ({"id": "user1"}, 1234567890)
         user_cache["user_token2"] = ({"id": "user2"}, 1234567890)
         
         # Limpa apenas um usuário
-        clear_user_cache("user1")
+        AuthService.clear_user_cache("user1")
         
         # Verifica se apenas o usuário correto foi removido
         assert len(user_cache) == 1
         assert "user_token2" in user_cache
 
-    @patch("main.time.time")
-    @patch("main.requests.get")
+    @patch("app.services.auth_service.time.time")
+    @patch("app.services.auth_service.requests.get")
     def test_cache_expiration(self, mock_get, mock_time, mock_auth0_responses):
         """Testa expiração do cache de usuários."""
-        from main import get_current_user_info_from_session, user_cache, CACHE_DURATION
+        from app.services.auth_service import AuthService, user_cache, CACHE_DURATION
         
         # Limpa cache antes do teste
         user_cache.clear()
@@ -320,7 +322,7 @@ class TestAuth:
         mock_request.session = {"access_token": "test-token"}
         
         # Primeira chamada - deve fazer requisição
-        result1 = get_current_user_info_from_session(mock_request)
+        result1 = AuthService.get_current_user_info_from_session(mock_request)
         
         # Verifica se foi adicionado ao cache
         assert len(user_cache) == 1
@@ -329,7 +331,7 @@ class TestAuth:
         mock_time.return_value = 1000000 + CACHE_DURATION + 1
         
         # Segunda chamada - deve fazer nova requisição devido à expiração
-        result2 = get_current_user_info_from_session(mock_request)
+        result2 = AuthService.get_current_user_info_from_session(mock_request)
         
         # Verifica se duas requisições foram feitas
         assert mock_get.call_count == 2

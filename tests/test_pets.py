@@ -15,8 +15,8 @@ class TestPetCRUD:
 
     def test_pet_form_page_new_pet(self, authenticated_client):
         """Testa página do formulário para novo pet."""
-        with patch("main.get_dog_breeds_list") as mock_dogs, \
-             patch("main.get_cat_breeds_list") as mock_cats:
+        with patch("app.routes.pet_routes.get_dog_breeds_list") as mock_dogs, \
+             patch("app.routes.pet_routes.get_cat_breeds_list") as mock_cats:
             
             mock_dogs.return_value = ["Golden Retriever", "Labrador"]
             mock_cats.return_value = ["Persian", "Siamese"]
@@ -38,8 +38,8 @@ class TestPetCRUD:
         result = db_collections["pets"].insert_one(sample_pet_data)
         pet_id = str(result.inserted_id)
         
-        with patch("main.get_dog_breeds_list") as mock_dogs, \
-             patch("main.get_cat_breeds_list") as mock_cats:
+        with patch("app.routes.pet_routes.get_dog_breeds_list") as mock_dogs, \
+             patch("app.routes.pet_routes.get_cat_breeds_list") as mock_cats:
             
             mock_dogs.return_value = ["Golden Retriever", "Labrador"]
             mock_cats.return_value = ["Persian", "Siamese"]
@@ -208,7 +208,7 @@ class TestPetCRUD:
         pet_id = str(result.inserted_id)
         
         # Tenta acessar com usuário diferente
-        with patch("main.get_current_user_info_from_session") as mock_get_user:
+        with patch("app.services.auth_service.AuthService.get_current_user_info_from_session") as mock_get_user:
             mock_get_user.return_value = veterinarian_user
             
             response = client.get(f"/pets/{pet_id}/profile")
@@ -233,7 +233,7 @@ class TestPetImages:
         # Simula upload de arquivo
         files = {"photo": ("test.jpg", test_image, "image/jpeg")}
         
-        with patch("main.save_image_with_thumbnail") as mock_save:
+        with patch("app.services.file_service.FileService.save_image_with_thumbnail") as mock_save:
             mock_save.return_value = {
                 "original": "uploads/temp/test_original.jpg",
                 "thumbnail": "uploads/temp/test_thumb.jpg",
@@ -247,7 +247,7 @@ class TestPetImages:
 
     def test_validate_image_file_success(self, test_image):
         """Testa validação de arquivo de imagem válido."""
-        from main import validate_image_file
+        from app.services.file_service import FileService
         from fastapi import UploadFile
         
         # Mock do UploadFile
@@ -255,56 +255,56 @@ class TestPetImages:
         upload_file.filename = "test.jpg"
         upload_file.size = 1024 * 1024  # 1MB
         
-        is_valid, error = validate_image_file(upload_file)
+        is_valid, error = FileService.validate_image_file(upload_file)
         
         assert is_valid is True
         assert error == ""
 
     def test_validate_image_file_invalid_extension(self):
         """Testa validação com extensão inválida."""
-        from main import validate_image_file
+        from app.services.file_service import FileService
         from fastapi import UploadFile
         
         upload_file = MagicMock(spec=UploadFile)
         upload_file.filename = "test.txt"
         upload_file.size = 1024
         
-        is_valid, error = validate_image_file(upload_file)
+        is_valid, error = FileService.validate_image_file(upload_file)
         
         assert is_valid is False
         assert "formato de arquivo não suportado" in error.lower()
 
     def test_validate_image_file_too_large(self):
         """Testa validação com arquivo muito grande."""
-        from main import validate_image_file, MAX_FILE_SIZE
+        from app.services.file_service import FileService, MAX_FILE_SIZE
         from fastapi import UploadFile
         
         upload_file = MagicMock(spec=UploadFile)
         upload_file.filename = "test.jpg"
         upload_file.size = MAX_FILE_SIZE + 1
         
-        is_valid, error = validate_image_file(upload_file)
+        is_valid, error = FileService.validate_image_file(upload_file)
         
         assert is_valid is False
         assert "muito grande" in error.lower()
 
     def test_validate_image_heic_not_supported(self):
         """Testa que arquivos HEIC não são suportados."""
-        from main import validate_image_file
+        from app.services.file_service import FileService
         from fastapi import UploadFile
         
         upload_file = MagicMock(spec=UploadFile)
         upload_file.filename = "test.heic"
         upload_file.size = 1024
         
-        is_valid, error = validate_image_file(upload_file)
+        is_valid, error = FileService.validate_image_file(upload_file)
         
         assert is_valid is False
         assert "formato" in error.lower() and "suportado" in error.lower()
 
     def test_save_image_with_thumbnail(self, temp_upload_dir, test_image):
         """Testa salvamento de imagem com criação de thumbnail."""
-        from main import save_image_with_thumbnail
+        from app.services.file_service import FileService
         from fastapi import UploadFile
         
         # Mock do UploadFile
@@ -312,8 +312,8 @@ class TestPetImages:
         upload_file.filename = "test.jpg"
         upload_file.file = test_image
         
-        with patch("main.UPLOAD_DIR", temp_upload_dir):
-            result = save_image_with_thumbnail(upload_file, "test-pet-id")
+        with patch("app.services.file_service.UPLOAD_DIR", temp_upload_dir):
+            result = FileService.save_image_with_thumbnail(upload_file, "test-pet-id")
             
             assert "original" in result
             assert "thumbnail" in result
@@ -328,7 +328,7 @@ class TestPetImages:
 
     def test_delete_pet_images(self, temp_upload_dir):
         """Testa remoção de imagens do pet."""
-        from main import delete_pet_images
+        from app.services.file_service import FileService
         
         # Cria estrutura de arquivos
         pet_dir = temp_upload_dir / "test-pet-id"
@@ -338,7 +338,7 @@ class TestPetImages:
         (pet_dir / "test_image.jpg").touch()
         (pet_dir / "thumb_image.jpg").touch()
         
-        delete_pet_images("test-pet-id")
+        FileService.delete_pet_images("test-pet-id")
         
         # Verifica se o diretório foi removido
         assert not pet_dir.exists()
@@ -350,7 +350,7 @@ class TestPetModels:
 
     def test_pet_base_model(self):
         """Testa o modelo base PetBase."""
-        from main import PetBase
+        from app.models import PetBase
         
         pet = PetBase(
             name="Test Pet",
@@ -369,7 +369,7 @@ class TestPetModels:
 
     def test_pet_create_model(self):
         """Testa o modelo PetCreate."""
-        from main import PetCreate
+        from app.models import PetCreate
         
         pet = PetCreate(
             name="New Pet",
@@ -383,7 +383,7 @@ class TestPetModels:
 
     def test_pet_update_model(self):
         """Testa o modelo PetUpdate."""
-        from main import PetUpdate
+        from app.models import PetUpdate
         
         # Todos os campos são opcionais
         pet_update = PetUpdate()
@@ -400,7 +400,7 @@ class TestPetModels:
 
     def test_pet_type_literal(self):
         """Testa o tipo literal PetType."""
-        from main import PetType, PetBase
+        from app.models import PetType, PetBase
         
         # Valores válidos
         dog = PetBase(
@@ -421,7 +421,7 @@ class TestPetModels:
 
     def test_pet_in_db_model(self):
         """Testa o modelo PetInDB."""
-        from main import PetInDB
+        from app.models import PetInDB
         from bson import ObjectId
         
         pet_id = ObjectId()

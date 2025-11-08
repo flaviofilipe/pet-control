@@ -64,10 +64,12 @@ def temp_upload_dir():
     temp_dir = tempfile.mkdtemp()
     original_upload_dir = None
     
-    # Importa main depois do patch do mongo
-    import main
-    original_upload_dir = main.UPLOAD_DIR
-    main.UPLOAD_DIR = Path(temp_dir)
+    # Importa o FileService da nova estrutura
+    from app.services.file_service import UPLOAD_DIR
+    import app.services.file_service as file_service_module
+    
+    original_upload_dir = UPLOAD_DIR
+    file_service_module.UPLOAD_DIR = Path(temp_dir)
     
     yield Path(temp_dir)
     
@@ -77,7 +79,7 @@ def temp_upload_dir():
     
     # Restaura o diretório original
     if original_upload_dir:
-        main.UPLOAD_DIR = original_upload_dir
+        file_service_module.UPLOAD_DIR = original_upload_dir
 
 
 @pytest.fixture
@@ -235,16 +237,19 @@ def client(clean_db, temp_upload_dir, patch_mongo):
 @pytest.fixture
 def authenticated_client(client, authenticated_user, mock_auth0_responses):
     """Cliente de teste com usuário autenticado."""
-    from main import app, get_current_user_info_from_session
+    from app.routes.auth_routes import get_current_user_from_session
+    import main
+    
+    app = main.app
     
     # Store the original override (if any)
-    original_override = app.dependency_overrides.get(get_current_user_info_from_session)
+    original_override = app.dependency_overrides.get(get_current_user_from_session)
     
     # Override the dependency directly in the app
     def mock_get_user():
         return authenticated_user
     
-    app.dependency_overrides[get_current_user_info_from_session] = mock_get_user
+    app.dependency_overrides[get_current_user_from_session] = mock_get_user
     
     try:
         # Simula sessão autenticada
@@ -255,24 +260,27 @@ def authenticated_client(client, authenticated_user, mock_auth0_responses):
     finally:
         # Restore original override or remove it
         if original_override is not None:
-            app.dependency_overrides[get_current_user_info_from_session] = original_override
+            app.dependency_overrides[get_current_user_from_session] = original_override
         else:
-            app.dependency_overrides.pop(get_current_user_info_from_session, None)
+            app.dependency_overrides.pop(get_current_user_from_session, None)
 
 
 @pytest.fixture
 def vet_client(client, veterinarian_user):
     """Cliente de teste com veterinário autenticado."""
-    from main import app, get_current_user_info_from_session
+    from app.routes.auth_routes import get_current_user_from_session
+    import main
+    
+    app = main.app
     
     # Store the original override (if any)
-    original_override = app.dependency_overrides.get(get_current_user_info_from_session)
+    original_override = app.dependency_overrides.get(get_current_user_from_session)
     
     # Override the dependency directly in the app
     def mock_get_user():
         return veterinarian_user
     
-    app.dependency_overrides[get_current_user_info_from_session] = mock_get_user
+    app.dependency_overrides[get_current_user_from_session] = mock_get_user
     
     try:
         with client:
@@ -281,22 +289,22 @@ def vet_client(client, veterinarian_user):
     finally:
         # Restore original override or remove it
         if original_override is not None:
-            app.dependency_overrides[get_current_user_info_from_session] = original_override
+            app.dependency_overrides[get_current_user_from_session] = original_override
         else:
-            app.dependency_overrides.pop(get_current_user_info_from_session, None)
+            app.dependency_overrides.pop(get_current_user_from_session, None)
 
 
 # Fixtures para dados do banco
 @pytest.fixture
 def db_collections():
     """Retorna as collections do banco de dados mockado."""
-    import main
+    from app.database import database
     return {
-        "profiles": main.profiles_collection,
-        "pets": main.pets_collection,
-        "vaccines": main.vaccines_collection,
-        "ectoparasites": main.ectoparasites_collection,
-        "vermifugos": main.vermifugos_collection,
+        "profiles": database.profiles_collection,
+        "pets": database.pets_collection,
+        "vaccines": database.vaccines_collection,
+        "ectoparasites": database.ectoparasites_collection,
+        "vermifugos": database.vermifugos_collection,
     }
 
 
