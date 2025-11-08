@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Pet Control Application - Development
+  # =============================================================================
+  app:
+    image: pet-control:dev
+    container_name: pet-control-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # Environment
+      - ENV=development
+      - LOG_LEVEL=DEBUG
+      
+      
+      # Auth0
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_API_AUDIENCE=${AUTH0_API_AUDIENCE}
+      - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
+      - AUTH0_CALLBACK_URI=${AUTH0_CALLBACK_URI}
+      
+      # MongoDB (conecta ao serviço mongodb abaixo)
+      - MONGO_URI=mongodb://root:root@mongodb:27017/
+      - DB_NAME=${DB_NAME:-pet_control}
+      
+      # Session Security
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+      
+      # Gmail (opcional para testes)
+      - GMAIL_EMAIL=${GMAIL_EMAIL}
+      - GMAIL_PASSWORD=${GMAIL_PASSWORD}
+      - GMAIL_SMTP_SERVER=${GMAIL_SMTP_SERVER}
+      - GMAIL_SMTP_PORT=${GMAIL_SMTP_PORT}
+    
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      # Exclude node_modules and venv to avoid conflicts
+      - /app/.venv
+    
+    depends_on:
+      - mongodb
+    
+    restart: unless-stopped
+
+  # =============================================================================
+  # MongoDB Database - Development
+  # =============================================================================
+  mongodb:
+    image: mongo:7
+    container_name: pet-control-mongodb-dev
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    ports:
+      - "27017:27017"
+    volumes:
+      - pet_control_mongo_dev_data:/data/db
+    restart: unless-stopped
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  pet_control_mongo_dev_data:
+    driver: local

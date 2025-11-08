@@ -69,6 +69,37 @@ def setup_static_files(app: FastAPI):
 
 def setup_routes(app: FastAPI):
     """Configura todas as rotas da aplicação"""
+    
+    # Health check endpoint para Docker e monitoramento
+    @app.get("/health", tags=["Health"])
+    async def health_check():
+        """Endpoint de health check para monitoramento e Docker"""
+        try:
+            from .database import database
+            from datetime import datetime
+            
+            # Testa conexão com banco de dados
+            database.client.admin.command("ismaster")
+            
+            return {
+                "status": "healthy",
+                "service": "pet-control-api",
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0",
+                "database": "connected"
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=503, 
+                detail={
+                    "status": "unhealthy",
+                    "service": "pet-control-api",
+                    "timestamp": datetime.now().isoformat(),
+                    "error": "Database connection failed",
+                    "details": str(e)
+                }
+            )
+    
     app.include_router(auth_router, tags=["Authentication"])
     app.include_router(dashboard_router, tags=["Dashboard"])
     app.include_router(user_router, tags=["User"])
