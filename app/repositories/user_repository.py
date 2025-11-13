@@ -13,6 +13,10 @@ class UserRepository(BaseRepository):
         """Busca perfil pelo ID do usuário"""
         return self.find_one({"_id": user_id})
     
+    def get_profile_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Busca perfil pelo email do usuário"""
+        return self.find_one({"email": email})
+    
     def create_or_update_profile(self, user_id: str, profile_data: Dict[str, Any]) -> bool:
         """Cria ou atualiza perfil do usuário"""
         profile_data["_id"] = user_id

@@ -177,8 +177,8 @@
                         <h4 class="text-xl font-bold text-sage">{{ vacina.nome_vacina }}</h4>
                         <div class="flex flex-col items-end space-y-2">
                             <!-- Badge de tipo -->
-                            <span class="badge-{{ 'core' if 'Essenciais' in vacina.tipo_vacina else 'non-core' }} text-xs font-medium px-2.5 py-1 rounded-full">
-                                {{ vacina.tipo_vacina.split('(')[0].strip() }}
+                            <span class="badge-{{ 'core' if 'Polivalente' in vacina.tipo_vacina else ('obligatory' if 'Obrigatória' in vacina.tipo_vacina else 'non-core') }} text-xs font-medium px-2.5 py-1 rounded-full">
+                                {{ vacina.tipo_vacina }}
                             </span>
                             
                             <!-- Badge de obrigatoriedade -->

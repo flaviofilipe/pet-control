@@ -68,7 +68,7 @@
                         {% endif %}
                     </div>
                     <div class="hidden sm:block">
-                        <h1 class="text-lg font-semibold">Bem-vindo, {{ user_info.name | default('Usuário') }}!</h1>
+                        <h1 class="text-lg font-semibold">Bem-vindo, {{ user_info.profile.name | default('Usuário') }}</h1>
                         <p class="text-sm opacity-90">{{ user_info.email | default('') }}</p>
                     </div>
                 </div>

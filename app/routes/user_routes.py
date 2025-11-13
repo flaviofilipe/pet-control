@@ -39,11 +39,17 @@ def edit_user_profile_page(
     user_service = UserService()
     profile_data = user_service.get_user_profile(user["id"], user["info"])
 
+    # Verifica se há mensagens na sessão
+    profile_message = request.session.pop("profile_message", None)
+    profile_message_text = request.session.pop("profile_message_text", None)
+
     return templates.TemplateResponse(
         "profile_update.html",
         {
             "request": request,
             "user_info": profile_data,
+            "profile_message": profile_message,
+            "profile_message_text": profile_message_text,
         },
     )
 
@@ -77,12 +83,14 @@ def create_or_update_user_profile(
         "is_vet": is_vet,
     }
 
+    user_email = user["info"].get("email")
+    
     success, message = user_service.create_or_update_profile(
-        user["id"], profile_data, user["info"].get("email")
+        user["id"], profile_data, user_email
     )
 
     if not success:
         print(f"Error updating profile: {message}")
 
-    # Redireciona o usuário de volta para a página de perfil
-    return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
+    # Redireciona o usuário para o dashboard após atualizar o perfil
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)

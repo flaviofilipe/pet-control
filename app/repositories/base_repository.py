@@ -38,4 +38,5 @@ class BaseRepository(ABC):
     def replace_one(self, filter_dict: Dict[str, Any], replacement: Dict[str, Any], upsert: bool = False) -> bool:
         """Substitui um documento"""
         result = self.collection.replace_one(filter_dict, replacement, upsert=upsert)
-        return result.modified_count > 0 or (upsert and result.upserted_id is not None)
+        # Retorna True se modificou, inseriu (upsert), ou se matched (documento já existe com os mesmos dados)
+        return result.modified_count > 0 or result.matched_count > 0 or (upsert and result.upserted_id is not None)

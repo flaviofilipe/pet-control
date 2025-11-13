@@ -118,14 +118,17 @@ EXPOSE 8000
 # Create startup script for dynamic environment handling
 RUN echo '#!/bin/bash\n\
 if [ "$ENV" = "production" ]; then\n\
-    echo "🚀 Starting in PRODUCTION mode with 4 workers..."\n\
-    exec uv run uvicorn main:app \\\n\
-        --host 0.0.0.0 \\\n\
-        --port 8000 \\\n\
+    echo "🚀 Starting in PRODUCTION mode with Gunicorn + 4 Uvicorn workers..."\n\
+    exec uv run gunicorn main:app \\\n\
+        --bind 0.0.0.0:8000 \\\n\
         --workers 4 \\\n\
         --worker-class uvicorn.workers.UvicornWorker \\\n\
-        --access-log \\\n\
-        --log-level info\n\
+        --access-logfile - \\\n\
+        --error-logfile - \\\n\
+        --log-level info \\\n\
+        --timeout 60 \\\n\
+        --graceful-timeout 30 \\\n\
+        --keep-alive 5\n\
 else\n\
     echo "🔧 Starting in DEVELOPMENT mode with hot reload..."\n\
     exec uv run uvicorn main:app \\\n\

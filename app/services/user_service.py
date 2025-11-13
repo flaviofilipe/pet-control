@@ -10,9 +10,15 @@ class UserService:
     
     def get_user_profile(self, user_id: str, user_info: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Busca perfil do usuário ou retorna dados básicos do Auth0
+        Busca perfil do usuário ou retorna dados básicos do Auth0.
+        Tenta buscar primeiro por ID, depois por email como fallback.
         """
+        # Tenta buscar por ID primeiro
         profile = self.user_repo.get_profile_by_id(user_id)
+        
+        # Se não encontrar por ID, tenta buscar por email
+        if not profile and user_info.get("email"):
+            profile = self.user_repo.get_profile_by_email(user_info.get("email"))
         
         if profile:
             return profile
@@ -42,6 +48,7 @@ class UserService:
             else:
                 return False, "Erro ao salvar perfil."
         except Exception as e:
+            print(f"Erro ao salvar perfil: {str(e)}")
             return False, f"Erro ao salvar perfil: {str(e)}"
     
     def search_veterinarians(self, search_term: str, requesting_user_id: str) -> List[Dict[str, Any]]:
