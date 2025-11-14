@@ -68,6 +68,6 @@ ENV MONGO_INITDB_DATABASE=pet_control
 VOLUME ["/data/db", "/backup"]
 
 # Comando de inicialização
-# Em produção, adicione --auth para habilitar autenticação
-CMD ["mongod", "--bind_ip_all", "--logpath", "/var/log/mongodb/mongod.log", "--logappend"]
+# Usa o arquivo de configuração mongod.conf
+CMD ["mongod", "--config", "/etc/mongod.conf"]
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
 from starlette.responses import JSONResponse
+from datetime import datetime
 from ..services import PetService
 from .auth_routes import get_current_user_from_session
 
@@ -27,13 +28,12 @@ def get_vet_dashboard_page(
             {
                 "request": request,
                 "is_authenticated": is_authenticated,
-                "current_year": 2024,
+                "current_year": datetime.now().year,
                 "user_info": user["info"],
                 "pets": pets_list,
             },
         )
     except HTTPException as e:
-        print(f"Error fetching vet dashboard data: {e}")
         raise
 
 

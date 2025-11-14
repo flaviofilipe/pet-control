@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional, List
+import re
 from .base_repository import BaseRepository
 from ..database import database
 
@@ -23,10 +24,11 @@ class UserRepository(BaseRepository):
         return self.replace_one({"_id": user_id}, profile_data, upsert=True)
     
     def search_veterinarians(self, search_term: str, exclude_user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Busca veterinários por nome"""
+        """Busca veterinários por nome. Previne injeção NoSQL via regex."""
+        safe_term = re.escape(search_term)
         filter_query = {
             "is_vet": True,
-            "name": {"$regex": search_term, "$options": "i"},
+            "name": {"$regex": safe_term, "$options": "i"},
             "_id": {"$ne": exclude_user_id}
         }
         return self.find(filter_query, limit=limit)
@@ -48,10 +50,7 @@ class UserRepository(BaseRepository):
         return self.find({"_id": {"$in": user_ids}})
     
     def get_user_emails_by_ids(self, user_ids: List[str]) -> List[Dict[str, str]]:
-        """
-        Busca emails dos usuários por lista de IDs
-        Retorna lista com id, name e email
-        """
+        """Busca emails dos usuários por lista de IDs. Retorna id, name e email."""
         if not user_ids:
             return []
         
@@ -63,5 +62,5 @@ class UserRepository(BaseRepository):
                 "email": user.get("email", "")
             }
             for user in users
-            if user.get("email")  # Só inclui usuários com email
+            if user.get("email")
         ]

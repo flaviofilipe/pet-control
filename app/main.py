@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
-from .config import SESSION_SECRET_KEY
+from .config import SESSION_SECRET_KEY, ENVIRONMENT, IS_PRODUCTION, IS_DEVELOPMENT, IS_TESTING, FRONTEND_URL
 from .services import FileService
 from .routes import (
     auth_router,
@@ -23,6 +23,7 @@ def create_app() -> FastAPI:
         description="API for user profile management with Auth0 and MongoDB.",
         version="1.0.0",
     )
+
 
     # Configuração de middlewares
     setup_middlewares(app)
@@ -44,19 +45,26 @@ def create_app() -> FastAPI:
 
 def setup_middlewares(app: FastAPI):
     """Configura middlewares da aplicação"""
-    # CORS middleware
+    # CORS middleware com configuração restrita
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=[FRONTEND_URL],  # Apenas a URL configurada
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Métodos explícitos
+        allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # Headers whitelist
+        max_age=3600,  # Cache de preflight por 1 hora
     )
 
     # Session middleware para gerenciar estado do usuário logado
+    # Configuração segura para prevenir compartilhamento de sessões
+    # https_only é automaticamente habilitado em produção
     app.add_middleware(
         SessionMiddleware,
         secret_key=SESSION_SECRET_KEY,
+        session_cookie="pet_control_session",  # Nome único do cookie
+        max_age=86400,  # 24 horas (em segundos) - sessão expira após 24h
+        same_site="lax",  # Proteção contra CSRF
+        https_only=IS_PRODUCTION,  # True em produção, False em development/testing
     )
 
 

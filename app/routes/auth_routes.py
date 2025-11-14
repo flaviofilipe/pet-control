@@ -51,12 +51,7 @@ def logout(request: Request):
     """
     Limpa a sessão e faz logout completo do Auth0.
     """
-    # Limpa o cache do usuário antes de limpar a sessão
-    access_token = request.session.get("access_token")
-    if access_token:
-        cache_key = f"user_{access_token[:20]}"
-        AuthService.clear_user_cache()
-
+    # Limpa a sessão do usuário
     request.session.clear()
 
     # URL de logout do Auth0 que força o usuário a digitar credenciais novamente

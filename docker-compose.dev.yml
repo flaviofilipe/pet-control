@@ -1,19 +1,25 @@
-version: '3.8'
-
 services:
   # =============================================================================
   # Pet Control Application - Development
   # =============================================================================
   app:
+    build:
+      context: .
+      dockerfile: dockerfile
+      args:
+        ENV: development
     image: pet-control:dev
     container_name: pet-control-dev
     ports:
       - "8000:8000"
     environment:
       # Environment
+      - ENVIRONMENT=development
       - ENV=development
       - LOG_LEVEL=DEBUG
       
+      # CORS
+      - FRONTEND_URL=http://localhost:8000
       
       # Auth0
       - AUTH0_DOMAIN=${AUTH0_DOMAIN}
@@ -23,7 +29,7 @@ services:
       - AUTH0_CALLBACK_URI=${AUTH0_CALLBACK_URI}
       
       # MongoDB (conecta ao serviço mongodb abaixo)
-      - MONGO_URI=mongodb://root:root@mongodb:27017/
+      - MONGO_URI=mongodb://root:root@mongodb:27017/pet_control?authSource=admin
       - DB_NAME=${DB_NAME:-pet_control}
       
       # Session Security
@@ -47,14 +53,16 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # MongoDB Database - Development
+  # MongoDB Database - Development (Com Dados Pré-carregados)
   # =============================================================================
   mongodb:
-    image: mongo:7
+    image: pet-control-mongodb:latest
     container_name: pet-control-mongodb-dev
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: pet_control
+      MONGO_APP_PASSWORD: root
     ports:
       - "27017:27017"
     volumes:

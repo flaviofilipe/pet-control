@@ -1,9 +1,12 @@
 from typing import Optional
+import logging
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
 from starlette.responses import JSONResponse
 from ..repositories import InfoRepository
 from .auth_routes import get_current_user_from_session
+
+logger = logging.getLogger(__name__)
 
 # Configuração do Jinja2
 templates = Jinja2Templates(directory="templates")
@@ -48,7 +51,7 @@ def get_vaccines_page(
         )
 
     except Exception as e:
-        print(f"Error fetching vaccines data: {e}")
+        logger.error(f"Error fetching vaccines data: {e}")
         raise HTTPException(
             status_code=500, detail="Erro ao carregar dados das vacinas"
         )
@@ -91,7 +94,7 @@ def get_ectoparasites_page(
         )
 
     except Exception as e:
-        print(f"Error fetching ectoparasites data: {e}")
+        logger.error(f"Error fetching ectoparasites data: {e}")
         raise HTTPException(
             status_code=500, detail="Erro ao carregar dados dos ectoparasitas"
         )
@@ -134,7 +137,7 @@ def get_vermifugos_page(
         )
 
     except Exception as e:
-        print(f"Error fetching vermifugos data: {e}")
+        logger.error(f"Error fetching vermifugos data: {e}")
         raise HTTPException(
             status_code=500, detail="Erro ao carregar dados dos vermífugos"
         )
@@ -159,7 +162,7 @@ def get_vaccines_autocomplete(
         return {"suggestions": suggestions}
 
     except Exception as e:
-        print(f"Error in vaccines autocomplete: {e}")
+        logger.error(f"Error in vaccines autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
 
 
@@ -182,7 +185,7 @@ def get_ectoparasites_autocomplete(
         return {"suggestions": suggestions}
 
     except Exception as e:
-        print(f"Error in ectoparasites autocomplete: {e}")
+        logger.error(f"Error in ectoparasites autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")
 
 
@@ -205,5 +208,5 @@ def get_vermifugos_autocomplete(
         return {"suggestions": suggestions}
 
     except Exception as e:
-        print(f"Error in vermifugos autocomplete: {e}")
+        logger.error(f"Error in vermifugos autocomplete: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar sugestões")

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # api:
   #   build: .
@@ -14,16 +12,23 @@ services:
   #   depends_on:
   #     - mongodb
   #   restart: on-failure
+  
+  # =============================================================================
+  # MongoDB Database - Com Dados Pré-carregados
+  # =============================================================================
   mongodb:
-    image: mongo:latest
-    container_name: mongodb
+    image: pet-control-mongodb:latest
+    container_name: pet-control-mongodb
     ports:
       - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: pet_control
+      MONGO_APP_PASSWORD: root
     volumes:
       - mongo-data:/data/db
+    restart: unless-stopped
 
 volumes:
   mongo-data:

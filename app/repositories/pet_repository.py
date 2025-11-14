@@ -1,8 +1,12 @@
 from typing import Dict, Any, Optional, List
+import logging
 from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timedelta
 from .base_repository import BaseRepository
 from ..database import database
+
+logger = logging.getLogger(__name__)
 
 
 class PetRepository(BaseRepository):
@@ -24,6 +28,10 @@ class PetRepository(BaseRepository):
     def get_pet_by_id(self, pet_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Busca pet por ID (verificando acesso do usuário)"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return None
+            
             pet = self.find_one({
                 "_id": ObjectId(pet_id),
                 "users": user_id,
@@ -35,7 +43,11 @@ class PetRepository(BaseRepository):
                     for treatment in pet["treatments"]:
                         treatment["_id"] = str(treatment["_id"])
             return pet
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching pet by id: {e}")
             return None
     
     def get_pet_by_nickname(self, nickname: str) -> Optional[Dict[str, Any]]:
@@ -58,25 +70,41 @@ class PetRepository(BaseRepository):
     def update_pet(self, pet_id: str, user_id: str, update_data: Dict[str, Any]) -> bool:
         """Atualiza um pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return False
+            
             filter_query = {
                 "_id": ObjectId(pet_id),
                 "users": user_id,
                 "deleted_at": None
             }
             return self.update_one(filter_query, {"$set": update_data})
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error updating pet: {e}")
             return False
     
     def soft_delete_pet(self, pet_id: str, user_id: str) -> bool:
         """Faz soft delete do pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return False
+            
             filter_query = {
                 "_id": ObjectId(pet_id),
                 "users": user_id,
                 "deleted_at": None
             }
             return self.update_one(filter_query, {"$set": {"deleted_at": datetime.now()}})
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error soft deleting pet: {e}")
             return False
     
     def check_nickname_exists(self, nickname: str) -> bool:
@@ -86,28 +114,48 @@ class PetRepository(BaseRepository):
     def grant_vet_access(self, pet_id: str, vet_id: str) -> bool:
         """Concede acesso de veterinário ao pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return False
+            
             result = self.collection.update_one(
                 {"_id": ObjectId(pet_id)},
                 {"$addToSet": {"users": vet_id}}
             )
             return result.modified_count > 0
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error granting vet access: {e}")
             return False
     
     def revoke_vet_access(self, pet_id: str, vet_id: str) -> bool:
         """Remove acesso de veterinário ao pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return False
+            
             result = self.collection.update_one(
                 {"_id": ObjectId(pet_id)},
                 {"$pull": {"users": vet_id}}
             )
             return result.modified_count > 0
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error revoking vet access: {e}")
             return False
     
     def add_treatment(self, pet_id: str, user_id: str, treatment_data: Dict[str, Any]) -> bool:
         """Adiciona tratamento ao pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format: {pet_id}")
+                return False
+            
             treatment_data["_id"] = ObjectId()
             result = self.collection.update_one(
                 {
@@ -118,12 +166,23 @@ class PetRepository(BaseRepository):
                 {"$push": {"treatments": treatment_data}}
             )
             return result.matched_count > 0
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error adding treatment: {e}")
             return False
     
     def update_treatment(self, pet_id: str, user_id: str, treatment_id: str, treatment_data: Dict[str, Any]) -> bool:
         """Atualiza tratamento do pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format for pet_id: {pet_id}")
+                return False
+            if not ObjectId.is_valid(treatment_id):
+                logger.warning(f"Invalid ObjectId format for treatment_id: {treatment_id}")
+                return False
+            
             treatment_data["_id"] = ObjectId(treatment_id)
             result = self.collection.update_one(
                 {
@@ -135,12 +194,23 @@ class PetRepository(BaseRepository):
                 {"$set": {"treatments.$": treatment_data}}
             )
             return result.matched_count > 0
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error updating treatment: {e}")
             return False
     
     def delete_treatment(self, pet_id: str, user_id: str, treatment_id: str) -> bool:
         """Remove tratamento do pet"""
         try:
+            if not ObjectId.is_valid(pet_id):
+                logger.warning(f"Invalid ObjectId format for pet_id: {pet_id}")
+                return False
+            if not ObjectId.is_valid(treatment_id):
+                logger.warning(f"Invalid ObjectId format for treatment_id: {treatment_id}")
+                return False
+            
             result = self.collection.update_one(
                 {
                     "_id": ObjectId(pet_id),
@@ -150,7 +220,11 @@ class PetRepository(BaseRepository):
                 {"$pull": {"treatments": {"_id": ObjectId(treatment_id)}}}
             )
             return result.matched_count > 0 and result.modified_count > 0
-        except:
+        except InvalidId as e:
+            logger.error(f"InvalidId error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting treatment: {e}")
             return False
     
     def get_scheduled_treatments_for_date(self, target_date: str) -> List[Dict[str, Any]]:
@@ -188,7 +262,7 @@ class PetRepository(BaseRepository):
             
             return results
         except Exception as e:
-            print(f"Erro ao buscar tratamentos agendados: {e}")
+            logger.error(f"Error fetching scheduled treatments: {e}")
             return []
     
     def get_tomorrow_scheduled_treatments(self) -> List[Dict[str, Any]]:
@@ -243,7 +317,7 @@ class PetRepository(BaseRepository):
             
             return results
         except Exception as e:
-            print(f"Erro ao buscar tratamentos do mês: {e}")
+            logger.error(f"Error fetching current month treatments: {e}")
             return []
     
     def get_expired_treatments(self) -> List[Dict[str, Any]]:
@@ -282,5 +356,5 @@ class PetRepository(BaseRepository):
             
             return results
         except Exception as e:
-            print(f"Erro ao buscar tratamentos expirados: {e}")
+            logger.error(f"Error fetching expired treatments: {e}")
             return []

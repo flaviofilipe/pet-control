@@ -15,6 +15,7 @@ import json
 
 # Define variáveis de ambiente para teste antes de importar main
 os.environ.update({
+    "ENVIRONMENT": "testing",  # Define ambiente de testes
     "AUTH0_DOMAIN": "test-domain.auth0.com",
     "AUTH0_API_AUDIENCE": "test-audience",
     "AUTH0_CLIENT_ID": "test-client-id",

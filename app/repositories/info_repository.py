@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional, List
+import re
 from .base_repository import BaseRepository
 from ..database import database
 
@@ -12,16 +13,16 @@ class InfoRepository(BaseRepository):
         self.ectoparasites_collection = database.ectoparasites_collection
         self.vermifugos_collection = database.vermifugos_collection
     
-    # Métodos para Vacinas
     def search_vaccines(self, search: Optional[str] = None, species: Optional[str] = None, vaccine_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca vacinas com filtros"""
+        """Busca vacinas com filtros. Previne injeção NoSQL."""
         filter_query = {}
         
         if search:
+            safe_search = re.escape(search)
             filter_query["$or"] = [
-                {"nome_vacina": {"$regex": search, "$options": "i"}},
-                {"descricao": {"$regex": search, "$options": "i"}},
-                {"protege_contra": {"$regex": search, "$options": "i"}},
+                {"nome_vacina": {"$regex": safe_search, "$options": "i"}},
+                {"descricao": {"$regex": safe_search, "$options": "i"}},
+                {"protege_contra": {"$regex": safe_search, "$options": "i"}},
             ]
         
         if species:
@@ -45,8 +46,9 @@ class InfoRepository(BaseRepository):
         return list(self.vaccines_collection.distinct("tipo_vacina"))
     
     def get_vaccines_autocomplete(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Autocomplete para vacinas"""
-        filter_query = {"nome_vacina": {"$regex": f"^{query}", "$options": "i"}}
+        """Autocomplete para vacinas. Previne injeção NoSQL."""
+        safe_query = re.escape(query)
+        filter_query = {"nome_vacina": {"$regex": f"^{safe_query}", "$options": "i"}}
         vaccines = list(self.vaccines_collection.find(filter_query).limit(limit).sort("nome_vacina", 1))
         
         suggestions = []
@@ -59,19 +61,19 @@ class InfoRepository(BaseRepository):
             })
         return suggestions
     
-    # Métodos para Ectoparasitas
     def search_ectoparasites(self, search: Optional[str] = None, species: Optional[str] = None, pest_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca ectoparasitas com filtros"""
+        """Busca ectoparasitas com filtros. Previne injeção NoSQL."""
         filter_query = {}
         
         if search:
+            safe_search = re.escape(search)
             filter_query["$or"] = [
-                {"nome_praga": {"$regex": search, "$options": "i"}},
-                {"transmissor_de_doencas": {"$regex": search, "$options": "i"}},
-                {"sintomas_no_animal": {"$regex": search, "$options": "i"}},
-                {"medicamentos_de_combate.descricao": {"$regex": search, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": search, "$options": "i"}},
-                {"observacoes_adicionais": {"$regex": search, "$options": "i"}},
+                {"nome_praga": {"$regex": safe_search, "$options": "i"}},
+                {"transmissor_de_doencas": {"$regex": safe_search, "$options": "i"}},
+                {"sintomas_no_animal": {"$regex": safe_search, "$options": "i"}},
+                {"medicamentos_de_combate.descricao": {"$regex": safe_search, "$options": "i"}},
+                {"medicamentos_de_combate.principios_ativos": {"$regex": safe_search, "$options": "i"}},
+                {"observacoes_adicionais": {"$regex": safe_search, "$options": "i"}},
             ]
         
         if species:
@@ -103,14 +105,15 @@ class InfoRepository(BaseRepository):
         return list(self.ectoparasites_collection.distinct("tipo_praga"))
     
     def get_ectoparasites_autocomplete(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Autocomplete para ectoparasitas"""
+        """Autocomplete para ectoparasitas. Previne injeção NoSQL."""
+        safe_query = re.escape(query)
         filter_query = {
             "$or": [
-                {"nome_praga": {"$regex": f"^{query}", "$options": "i"}},
-                {"nome_praga": {"$regex": query, "$options": "i"}},
-                {"transmissor_de_doencas": {"$regex": query, "$options": "i"}},
-                {"sintomas_no_animal": {"$regex": query, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": query, "$options": "i"}},
+                {"nome_praga": {"$regex": f"^{safe_query}", "$options": "i"}},
+                {"nome_praga": {"$regex": safe_query, "$options": "i"}},
+                {"transmissor_de_doencas": {"$regex": safe_query, "$options": "i"}},
+                {"sintomas_no_animal": {"$regex": safe_query, "$options": "i"}},
+                {"medicamentos_de_combate.principios_ativos": {"$regex": safe_query, "$options": "i"}},
             ]
         }
         

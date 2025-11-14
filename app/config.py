@@ -5,8 +5,22 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Environment configuration
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
+
+# Validate environment
+VALID_ENVIRONMENTS = ["development", "testing", "production"]
+if ENVIRONMENT not in VALID_ENVIRONMENTS:
+    raise ValueError(f"ENVIRONMENT must be one of: {', '.join(VALID_ENVIRONMENTS)}")
+
+# Environment helpers
+IS_DEVELOPMENT = ENVIRONMENT == "development"
+IS_TESTING = ENVIRONMENT == "testing"
+IS_PRODUCTION = ENVIRONMENT == "production"
+
 # Logging configuration
-logging.basicConfig(level=logging.WARNING)
+log_level = logging.INFO if IS_PRODUCTION else logging.WARNING
+logging.basicConfig(level=log_level)
 
 # Auth0 configuration
 AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
@@ -21,6 +35,13 @@ if not all([AUTH0_DOMAIN, AUTH0_API_AUDIENCE, CLIENT_ID, CLIENT_SECRET, AUTH0_CA
 
 # Session configuration
 SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "your-super-secret-key-here")
+
+# Validate SESSION_SECRET_KEY in production
+if IS_PRODUCTION and SESSION_SECRET_KEY == "your-super-secret-key-here":
+    raise ValueError("SESSION_SECRET_KEY must be set to a secure value in production")
+
+# CORS configuration
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:8000")
 
 # Database configuration
 DB_NAME = os.environ.get("DB_NAME", "pet_control")
