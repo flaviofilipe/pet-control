@@ -100,7 +100,7 @@ if (existingProfiles > 0) {
             birth_date: '2020-03-15',
             color: 'Dourado',
             weight: 28.5,
-            users: [ObjectId('507f1f77bcf86cd799439011')],
+            users: ['507f1f77bcf86cd799439011'],
             treatments: [
                 {
                     _id: ObjectId(),
@@ -136,7 +136,7 @@ if (existingProfiles > 0) {
             birth_date: '2021-07-20',
             color: 'Creme',
             weight: 4.2,
-            users: [ObjectId('507f1f77bcf86cd799439012')],
+            users: ['507f1f77bcf86cd799439012'],
             treatments: [
                 {
                     _id: ObjectId(),
@@ -163,8 +163,8 @@ if (existingProfiles > 0) {
             color: 'Branco',
             weight: 6.8,
             users: [
-                ObjectId('507f1f77bcf86cd799439011'),
-                ObjectId('507f1f77bcf86cd799439013')
+                '507f1f77bcf86cd799439011',
+                '507f1f77bcf86cd799439013'
             ],
             treatments: [],
             deleted_at: null,

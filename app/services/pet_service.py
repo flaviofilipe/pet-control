@@ -1,9 +1,12 @@
 import random
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from faker import Faker
 from faker_food import FoodProvider
 from ..repositories import PetRepository, UserRepository
+
+logger = logging.getLogger(__name__)
 
 # Inicializa Faker e adiciona provedor de alimentos
 fake = Faker("pt_BR")
@@ -95,12 +98,15 @@ class PetService:
         Retorna: (sucesso, mensagem)
         """
         try:
+            logger.info(f"Attempting to update pet: pet_id={pet_id}, user_id={user_id}")
             success = self.pet_repo.update_pet(pet_id, user_id, pet_data)
             if success:
                 return True, "Pet atualizado com sucesso!"
             else:
+                logger.warning(f"Failed to update pet: pet_id={pet_id}, user_id={user_id}")
                 return False, "Pet não encontrado ou sem permissão para editar."
         except Exception as e:
+            logger.error(f"Error updating pet: {str(e)}", exc_info=True)
             return False, f"Erro ao atualizar pet: {str(e)}"
     
     def delete_pet(self, pet_id: str, user_id: str) -> Tuple[bool, str]:

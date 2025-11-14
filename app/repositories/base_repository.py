@@ -28,7 +28,7 @@ class BaseRepository(ABC):
     def update_one(self, filter_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> bool:
         """Atualiza um documento"""
         result = self.collection.update_one(filter_dict, update_dict)
-        return result.modified_count > 0
+        return result.modified_count > 0 or result.matched_count > 0
     
     def delete_one(self, filter_dict: Dict[str, Any]) -> bool:
         """Remove um documento"""

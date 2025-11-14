@@ -18,6 +18,8 @@ class AuthService:
     @staticmethod
     def refresh_auth_token(refresh_token: str) -> dict:
         """Renova o token de acesso usando o refresh token."""
+        logger.info("Attempting to refresh access token...")
+        
         payload = {
             "grant_type": "refresh_token",
             "client_id": CLIENT_ID,
@@ -26,23 +28,36 @@ class AuthService:
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        response = requests.post(
-            f"https://{AUTH0_DOMAIN}/oauth/token",
-            headers=headers,
-            data=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.post(
+                f"https://{AUTH0_DOMAIN}/oauth/token",
+                headers=headers,
+                data=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+            tokens = response.json()
+            logger.info("✅ Token refreshed successfully")
+            return tokens
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response else "unknown"
+            error_body = e.response.text if e.response else "no response"
+            logger.error(f"❌ Token refresh failed: status={status_code}, error={error_body}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Token refresh error: {str(e)}")
+            raise
     
     @staticmethod
     def get_current_user_info_from_session(request: Request) -> Dict | Exception:
         """
         Dependência para obter informações do usuário a partir da sessão.
         Renova o token automaticamente se necessário.
+        USA CACHE NA SESSÃO para evitar rate limit do Auth0 (429 Too Many Requests).
         """
         access_token = request.session.get("access_token")
         refresh_token = request.session.get("refresh_token")
+        cached_user_info = request.session.get("user_info")
 
         # Verifica se há um flag de refresh em andamento para evitar loops
         if request.session.get("refreshing_token"):
@@ -55,6 +70,13 @@ class AuthService:
         if not access_token:
             raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
 
+        # Se temos user_info em cache, usar sem chamar Auth0
+        if cached_user_info:
+            user_id = cached_user_info.get("sub")
+            if user_id:
+                return {"id": user_id, "info": cached_user_info}
+
+        # Cache miss ou inválido - buscar do Auth0
         headers = {"Authorization": f"Bearer {access_token}"}
         try:
             response = requests.get(
@@ -68,6 +90,9 @@ class AuthService:
             if not user_id:
                 raise HTTPException(status_code=401, detail="User ID not found in token.")
 
+            # Armazena no cache da sessão
+            request.session["user_info"] = user_info
+
             result = {"id": user_id, "info": user_info}
             return result
         except requests.exceptions.Timeout:
@@ -76,6 +101,23 @@ class AuthService:
                 status_code=408, detail="Request timeout. Please try again."
             )
         except requests.exceptions.HTTPError as http_err:
+            status_code = http_err.response.status_code if http_err.response else "unknown"
+            logger.error(f"Auth0 UserInfo HTTP error: status={status_code}, error={str(http_err)}")
+            
+            # Se for 429 (Too Many Requests), usar cache ou retornar erro específico
+            if http_err.response.status_code == 429:
+                logger.error("⚠️ Auth0 Rate Limit exceeded (429). Using cached user info if available.")
+                if cached_user_info:
+                    user_id = cached_user_info.get("sub")
+                    if user_id:
+                        logger.info("✅ Using cached user info due to rate limit")
+                        return {"id": user_id, "info": cached_user_info}
+                # Se não tem cache, retornar erro específico SEM limpar sessão
+                raise HTTPException(
+                    status_code=429, 
+                    detail="Auth0 rate limit exceeded. Please wait a moment and try again."
+                )
+            
             if http_err.response.status_code == 401 and refresh_token:
                 logger.info("Access token expired, attempting to refresh")
                 try:

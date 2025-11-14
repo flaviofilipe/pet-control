@@ -1,7 +1,11 @@
 import os
+import logging
+import requests
 from fastapi import APIRouter, HTTPException, Request, Depends
 from starlette.responses import RedirectResponse
 from ..services import AuthService
+
+logger = logging.getLogger(__name__)
 
 # Auth0 configuration
 AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
@@ -32,9 +36,32 @@ def callback(request: Request, code: str):
     try:
         token_info = AuthService.exchange_code_for_token(code, AUTH0_CALLBACK_URI)
 
+        access_token = token_info.get("access_token")
+        refresh_token = token_info.get("refresh_token")
+        
+        logger.info(f"Auth0 callback - access_token: {'present' if access_token else 'MISSING'}")
+        logger.info(f"Auth0 callback - refresh_token: {'present' if refresh_token else 'MISSING'}")
+        
+        if not refresh_token:
+            logger.warning("⚠️ Auth0 did not return a refresh_token! Check Auth0 application settings.")
+        
+        # Busca informações do usuário e armazena no cache da sessão
+        try:
+            response = requests.get(
+                f"https://{AUTH0_DOMAIN}/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10
+            )
+            response.raise_for_status()
+            user_info = response.json()
+            request.session["user_info"] = user_info
+            logger.info("✅ User info cached in session")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to cache user info: {str(e)}")
+        
         # Armazena ambos os tokens na sessão
-        request.session["access_token"] = token_info.get("access_token")
-        request.session["refresh_token"] = token_info.get("refresh_token")
+        request.session["access_token"] = access_token
+        request.session["refresh_token"] = refresh_token
 
         # Redireciona o usuário para o dashboard
         return RedirectResponse(url="/dashboard")
