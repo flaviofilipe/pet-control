@@ -1,248 +1,255 @@
+"""
+Repository para informações sobre vacinas, ectoparasitas e vermífugos usando SQLAlchemy
+"""
+
 from typing import Dict, Any, Optional, List
-import re
-from .base_repository import BaseRepository
-from ..database import database
+from sqlalchemy import select, or_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database.models.vaccine import Vaccine
+from app.database.models.ectoparasite import Ectoparasite
+from app.database.models.vermifugo import Vermifugo
 
 
-class InfoRepository(BaseRepository):
+class InfoRepository:
     """Repository para informações sobre vacinas, ectoparasitas e vermífugos"""
     
-    def __init__(self):
-        # Não usa super().__init__ pois trabalha com múltiplas collections
-        self.vaccines_collection = database.vaccines_collection
-        self.ectoparasites_collection = database.ectoparasites_collection
-        self.vermifugos_collection = database.vermifugos_collection
+    def __init__(self, session: AsyncSession):
+        self.session = session
     
-    def search_vaccines(self, search: Optional[str] = None, species: Optional[str] = None, vaccine_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca vacinas com filtros. Previne injeção NoSQL."""
-        filter_query = {}
+    # ==================== VACINAS ====================
+    
+    async def search_vaccines(
+        self,
+        search: Optional[str] = None,
+        species: Optional[str] = None,
+        vaccine_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Busca vacinas com filtros"""
+        query = select(Vaccine)
         
         if search:
-            safe_search = re.escape(search)
-            filter_query["$or"] = [
-                {"nome_vacina": {"$regex": safe_search, "$options": "i"}},
-                {"descricao": {"$regex": safe_search, "$options": "i"}},
-                {"protege_contra": {"$regex": safe_search, "$options": "i"}},
-            ]
+            search_filter = or_(
+                Vaccine.nome_vacina.ilike(f"%{search}%"),
+                Vaccine.descricao.ilike(f"%{search}%"),
+                func.array_to_string(Vaccine.protege_contra, ' ').ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
         
         if species:
-            filter_query["especie_alvo"] = species
-            
+            query = query.where(Vaccine.especie_alvo == species)
+        
         if vaccine_type:
-            filter_query["tipo_vacina"] = vaccine_type
+            query = query.where(Vaccine.tipo_vacina == vaccine_type)
         
-        vaccines = list(self.vaccines_collection.find(filter_query).sort("nome_vacina", 1))
-        for vaccine in vaccines:
-            vaccine["_id"] = str(vaccine["_id"])
+        query = query.order_by(Vaccine.nome_vacina)
         
-        return vaccines
+        result = await self.session.execute(query)
+        vaccines = result.scalars().all()
+        return [v.to_dict() for v in vaccines]
     
-    def get_vaccine_species(self) -> List[str]:
+    async def get_vaccine_species(self) -> List[str]:
         """Retorna espécies disponíveis para vacinas"""
-        return list(self.vaccines_collection.distinct("especie_alvo"))
+        query = select(Vaccine.especie_alvo).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_vaccine_types(self) -> List[str]:
+    async def get_vaccine_types(self) -> List[str]:
         """Retorna tipos de vacinas disponíveis"""
-        return list(self.vaccines_collection.distinct("tipo_vacina"))
+        query = select(Vaccine.tipo_vacina).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_vaccines_autocomplete(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Autocomplete para vacinas. Previne injeção NoSQL."""
-        safe_query = re.escape(query)
-        filter_query = {"nome_vacina": {"$regex": f"^{safe_query}", "$options": "i"}}
-        vaccines = list(self.vaccines_collection.find(filter_query).limit(limit).sort("nome_vacina", 1))
+    async def get_vaccines_autocomplete(self, query_str: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Autocomplete para vacinas"""
+        query = (
+            select(Vaccine)
+            .where(Vaccine.nome_vacina.ilike(f"{query_str}%"))
+            .order_by(Vaccine.nome_vacina)
+            .limit(limit)
+        )
+        
+        result = await self.session.execute(query)
+        vaccines = result.scalars().all()
         
         suggestions = []
         for vaccine in vaccines:
             suggestions.append({
-                "id": str(vaccine["_id"]),
-                "nome": vaccine["nome_vacina"],
-                "especie": vaccine["especie_alvo"],
-                "tipo": vaccine["tipo_vacina"],
+                "id": str(vaccine.id),
+                "nome": vaccine.nome_vacina,
+                "especie": vaccine.especie_alvo,
+                "tipo": vaccine.tipo_vacina,
             })
         return suggestions
     
-    def search_ectoparasites(self, search: Optional[str] = None, species: Optional[str] = None, pest_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca ectoparasitas com filtros. Previne injeção NoSQL."""
-        filter_query = {}
+    # ==================== ECTOPARASITAS ====================
+    
+    async def search_ectoparasites(
+        self,
+        search: Optional[str] = None,
+        species: Optional[str] = None,
+        pest_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Busca ectoparasitas com filtros"""
+        query = select(Ectoparasite)
         
         if search:
-            safe_search = re.escape(search)
-            filter_query["$or"] = [
-                {"nome_praga": {"$regex": safe_search, "$options": "i"}},
-                {"transmissor_de_doencas": {"$regex": safe_search, "$options": "i"}},
-                {"sintomas_no_animal": {"$regex": safe_search, "$options": "i"}},
-                {"medicamentos_de_combate.descricao": {"$regex": safe_search, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": safe_search, "$options": "i"}},
-                {"observacoes_adicionais": {"$regex": safe_search, "$options": "i"}},
-            ]
+            search_filter = or_(
+                Ectoparasite.nome_praga.ilike(f"%{search}%"),
+                func.array_to_string(Ectoparasite.transmissor_de_doencas, ' ').ilike(f"%{search}%"),
+                func.array_to_string(Ectoparasite.sintomas_no_animal, ' ').ilike(f"%{search}%"),
+                Ectoparasite.observacoes_adicionais.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
         
         if species:
-            filter_query["especies_alvo"] = species
-            
+            query = query.where(Ectoparasite.especies_alvo.any(species))
+        
         if pest_type:
-            filter_query["tipo_praga"] = pest_type
+            query = query.where(Ectoparasite.tipo_praga == pest_type)
         
-        ectoparasites = list(self.ectoparasites_collection.find(filter_query).sort("nome_praga", 1))
-        for ectoparasite in ectoparasites:
-            ectoparasite["_id"] = str(ectoparasite["_id"])
+        query = query.order_by(Ectoparasite.nome_praga)
         
-        return ectoparasites
+        result = await self.session.execute(query)
+        ectoparasites = result.scalars().all()
+        return [e.to_dict() for e in ectoparasites]
     
-    def get_ectoparasite_species(self) -> List[str]:
+    async def get_ectoparasite_species(self) -> List[str]:
         """Retorna espécies disponíveis para ectoparasitas"""
-        species = list(self.ectoparasites_collection.distinct("especies_alvo"))
-        # Flatten da lista de listas
-        species_flat = []
-        for species_list in species:
-            if isinstance(species_list, list):
-                species_flat.extend(species_list)
-            else:
-                species_flat.append(species_list)
-        return list(set(species_flat))
+        query = select(func.unnest(Ectoparasite.especies_alvo)).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_ectoparasite_types(self) -> List[str]:
+    async def get_ectoparasite_types(self) -> List[str]:
         """Retorna tipos de ectoparasitas disponíveis"""
-        return list(self.ectoparasites_collection.distinct("tipo_praga"))
+        query = select(Ectoparasite.tipo_praga).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_ectoparasites_autocomplete(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Autocomplete para ectoparasitas. Previne injeção NoSQL."""
-        safe_query = re.escape(query)
-        filter_query = {
-            "$or": [
-                {"nome_praga": {"$regex": f"^{safe_query}", "$options": "i"}},
-                {"nome_praga": {"$regex": safe_query, "$options": "i"}},
-                {"transmissor_de_doencas": {"$regex": safe_query, "$options": "i"}},
-                {"sintomas_no_animal": {"$regex": safe_query, "$options": "i"}},
-                {"medicamentos_de_combate.principios_ativos": {"$regex": safe_query, "$options": "i"}},
-            ]
-        }
+    async def get_ectoparasites_autocomplete(self, query_str: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Autocomplete para ectoparasitas"""
+        search_filter = or_(
+            Ectoparasite.nome_praga.ilike(f"%{query_str}%"),
+            func.array_to_string(Ectoparasite.transmissor_de_doencas, ' ').ilike(f"%{query_str}%"),
+            func.array_to_string(Ectoparasite.sintomas_no_animal, ' ').ilike(f"%{query_str}%")
+        )
         
-        ectoparasites = list(self.ectoparasites_collection.find(filter_query).limit(limit).sort("nome_praga", 1))
+        query = (
+            select(Ectoparasite)
+            .where(search_filter)
+            .order_by(Ectoparasite.nome_praga)
+            .limit(limit)
+        )
+        
+        result = await self.session.execute(query)
+        ectoparasites = result.scalars().all()
         
         suggestions = []
         for ectoparasite in ectoparasites:
-            especies = ", ".join(ectoparasite["especies_alvo"])
+            especies = ", ".join(ectoparasite.especies_alvo or [])
             
             # Determina onde o termo foi encontrado
             match_context = ""
-            if query.lower() in ectoparasite["nome_praga"].lower():
+            q_lower = query_str.lower()
+            if q_lower in ectoparasite.nome_praga.lower():
                 match_context = "Nome"
-            elif any(query.lower() in doenca.lower() for doenca in ectoparasite.get("transmissor_de_doencas", [])):
+            elif any(q_lower in d.lower() for d in (ectoparasite.transmissor_de_doencas or [])):
                 match_context = "Doença"
-            elif any(query.lower() in sintoma.lower() for sintoma in ectoparasite.get("sintomas_no_animal", [])):
+            elif any(q_lower in s.lower() for s in (ectoparasite.sintomas_no_animal or [])):
                 match_context = "Sintoma"
-            elif any(query.lower() in principio.lower() for medicamento in ectoparasite.get("medicamentos_de_combate", []) for principio in medicamento.get("principios_ativos", [])):
-                match_context = "Princípio Ativo"
             
             suggestions.append({
-                "id": str(ectoparasite["_id"]),
-                "nome": ectoparasite["nome_praga"],
+                "id": str(ectoparasite.id),
+                "nome": ectoparasite.nome_praga,
                 "especies": especies,
-                "tipo": ectoparasite["tipo_praga"],
+                "tipo": ectoparasite.tipo_praga,
                 "contexto": match_context,
             })
         
         return suggestions
     
-    # Métodos para Vermífugos
-    def search_vermifugos(self, search: Optional[str] = None, species: Optional[str] = None, pest_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    # ==================== VERMÍFUGOS ====================
+    
+    async def search_vermifugos(
+        self,
+        search: Optional[str] = None,
+        species: Optional[str] = None,
+        pest_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Busca vermífugos com filtros"""
-        vermifugos_doc = self.vermifugos_collection.find_one()
+        query = select(Vermifugo)
         
-        if not vermifugos_doc:
-            return []
-        
-        vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
-        
-        # Aplica filtros se fornecidos
         if search:
-            search_lower = search.lower()
-            vermifugos_list = [
-                v for v in vermifugos_list
-                if search_lower in v.get("nome_praga", "").lower()
-                or search_lower in v.get("tipo_praga", "").lower()
-                or any(search_lower in sintoma.lower() for sintoma in v.get("sintomas_no_animal", []))
-                or any(search_lower in med.get("descricao", "").lower() for med in v.get("medicamentos_de_combate", []))
-                or any(search_lower in principio.lower() for med in v.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", []))
-                or search_lower in v.get("observacoes_adicionais", "").lower()
-            ]
+            search_filter = or_(
+                Vermifugo.nome_praga.ilike(f"%{search}%"),
+                Vermifugo.tipo_praga.ilike(f"%{search}%"),
+                func.array_to_string(Vermifugo.sintomas_no_animal, ' ').ilike(f"%{search}%"),
+                Vermifugo.observacoes_adicionais.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
         
         if species:
-            vermifugos_list = [v for v in vermifugos_list if species in v.get("especies_alvo", [])]
-            
+            query = query.where(Vermifugo.especies_alvo.any(species))
+        
         if pest_type:
-            vermifugos_list = [v for v in vermifugos_list if v.get("tipo_praga") == pest_type]
+            query = query.where(Vermifugo.tipo_praga == pest_type)
         
-        # Adiciona ID único para cada vermífugo
-        for i, vermifugo in enumerate(vermifugos_list):
-            vermifugo["_id"] = str(i)
+        query = query.order_by(Vermifugo.nome_praga)
         
-        return vermifugos_list
+        result = await self.session.execute(query)
+        vermifugos = result.scalars().all()
+        return [v.to_dict() for v in vermifugos]
     
-    def get_vermifugo_species(self) -> List[str]:
+    async def get_vermifugo_species(self) -> List[str]:
         """Retorna espécies disponíveis para vermífugos"""
-        vermifugos_doc = self.vermifugos_collection.find_one()
-        if not vermifugos_doc:
-            return []
-            
-        all_vermifugos = vermifugos_doc.get("parasitas_e_tratamentos", [])
-        species = list(set([
-            especie for v in all_vermifugos 
-            for especie in v.get("especies_alvo", [])
-        ]))
-        return species
+        query = select(func.unnest(Vermifugo.especies_alvo)).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_vermifugo_types(self) -> List[str]:
+    async def get_vermifugo_types(self) -> List[str]:
         """Retorna tipos de vermífugos disponíveis"""
-        vermifugos_doc = self.vermifugos_collection.find_one()
-        if not vermifugos_doc:
-            return []
-            
-        all_vermifugos = vermifugos_doc.get("parasitas_e_tratamentos", [])
-        types = list(set([v.get("tipo_praga") for v in all_vermifugos if v.get("tipo_praga")]))
-        return types
+        query = select(Vermifugo.tipo_praga).distinct()
+        result = await self.session.execute(query)
+        return [row[0] for row in result.all() if row[0]]
     
-    def get_vermifugos_autocomplete(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_vermifugos_autocomplete(self, query_str: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Autocomplete para vermífugos"""
-        vermifugos_doc = self.vermifugos_collection.find_one()
-        if not vermifugos_doc:
-            return []
+        search_filter = or_(
+            Vermifugo.nome_praga.ilike(f"%{query_str}%"),
+            Vermifugo.tipo_praga.ilike(f"%{query_str}%"),
+            func.array_to_string(Vermifugo.sintomas_no_animal, ' ').ilike(f"%{query_str}%")
+        )
         
-        vermifugos_list = vermifugos_doc.get("parasitas_e_tratamentos", [])
+        query = (
+            select(Vermifugo)
+            .where(search_filter)
+            .order_by(Vermifugo.nome_praga)
+            .limit(limit)
+        )
+        
+        result = await self.session.execute(query)
+        vermifugos = result.scalars().all()
+        
         suggestions = []
-        
-        for i, vermifugo in enumerate(vermifugos_list):
-            q_lower = query.lower()
-            match_found = False
+        for vermifugo in vermifugos:
+            especies = ", ".join(vermifugo.especies_alvo or [])
+            
+            # Determina onde o termo foi encontrado
             match_context = ""
-            
-            if q_lower in vermifugo.get("nome_praga", "").lower():
-                match_found = True
+            q_lower = query_str.lower()
+            if q_lower in vermifugo.nome_praga.lower():
                 match_context = "Nome"
-            elif q_lower in vermifugo.get("tipo_praga", "").lower():
-                match_found = True
+            elif q_lower in vermifugo.tipo_praga.lower():
                 match_context = "Tipo"
-            elif any(q_lower in sintoma.lower() for sintoma in vermifugo.get("sintomas_no_animal", [])):
-                match_found = True
+            elif any(q_lower in s.lower() for s in (vermifugo.sintomas_no_animal or [])):
                 match_context = "Sintoma"
-            elif any(q_lower in principio.lower() for med in vermifugo.get("medicamentos_de_combate", []) for principio in med.get("principios_ativos", [])):
-                match_found = True
-                match_context = "Princípio Ativo"
-            elif q_lower in vermifugo.get("observacoes_adicionais", "").lower():
-                match_found = True
-                match_context = "Observações"
             
-            if match_found:
-                especies = ", ".join(vermifugo.get("especies_alvo", []))
-                suggestions.append({
-                    "id": str(i),
-                    "nome": vermifugo.get("nome_praga", ""),
-                    "especies": especies,
-                    "tipo": vermifugo.get("tipo_praga", ""),
-                    "contexto": match_context,
-                })
-                
-                if len(suggestions) >= limit:
-                    break
+            suggestions.append({
+                "id": str(vermifugo.id),
+                "nome": vermifugo.nome_praga,
+                "especies": especies,
+                "tipo": vermifugo.tipo_praga,
+                "contexto": match_context,
+            })
         
         return suggestions
+

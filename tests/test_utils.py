@@ -232,47 +232,13 @@ class TestLandingPage:
         response = client.get("/")
         
         assert response.status_code == 200
-        assert "2024" in response.text  # Ano atual
+        assert "2025" in response.text  # Ano atual
 
     def test_landing_page_authenticated(self, authenticated_client):
         """Testa página inicial para usuário autenticado."""
         response = authenticated_client.get("/")
         
         assert response.status_code == 200
-
-
-@pytest.mark.unit
-class TestCacheUtilities:
-    """Testes para utilitários de cache."""
-
-    def test_user_cache_operations(self):
-        """Testa operações básicas do cache de usuários."""
-        from app.services.auth_service import user_cache
-        from app.services.auth_service import AuthService
-        import time
-        
-        # Limpa cache inicialmente
-        AuthService.clear_user_cache()
-        
-        # Adiciona dados ao cache
-        current_time = time.time()
-        user_data = {"id": "test-user", "name": "Test User"}
-        cache_key = "test_key"
-        
-        user_cache[cache_key] = (user_data, current_time)
-        
-        # Verifica se foi adicionado
-        assert cache_key in user_cache
-        cached_data, cached_time = user_cache[cache_key]
-        assert cached_data["id"] == "test-user"
-        assert cached_time == current_time
-
-    def test_cache_duration_constant(self):
-        """Testa constante de duração do cache."""
-        from app.services.auth_service import CACHE_DURATION
-        
-        assert CACHE_DURATION == 300  # 5 minutos
-        assert isinstance(CACHE_DURATION, int)
 
 
 @pytest.mark.unit

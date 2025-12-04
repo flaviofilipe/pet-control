@@ -1,0 +1,45 @@
+# =============================================================================
+# Dockerfile PostgreSQL - Pet Control System
+# Imagem customizada com extensões e otimizações
+# =============================================================================
+
+FROM postgres:15-alpine
+
+# Metadados
+LABEL maintainer="Pet Control Team"
+LABEL description="PostgreSQL customizado para Pet Control System"
+LABEL version="1.0"
+
+# Variáveis de ambiente padrão
+ENV POSTGRES_DB=pet_control
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV LANG=pt_BR.UTF-8
+ENV LC_ALL=pt_BR.UTF-8
+
+# Instalar extensões necessárias
+RUN apk add --no-cache \
+    postgresql-contrib \
+    && rm -rf /var/cache/apk/*
+
+# Criar diretório para scripts customizados
+RUN mkdir -p /docker-entrypoint-initdb.d
+
+# Copiar script de criação de usuário da aplicação
+COPY postgresql/init/01-create-app-user.sh /docker-entrypoint-initdb.d/
+COPY postgresql/config/postgresql.conf /etc/postgresql/postgresql.conf
+
+# Script de health check
+COPY postgresql/scripts/health-check.sh /usr/local/bin/health-check.sh
+RUN chmod +x /usr/local/bin/health-check.sh
+
+# Expor porta padrão
+EXPOSE 5432
+
+# Configurar health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD /usr/local/bin/health-check.sh
+
+# Comando padrão
+CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+

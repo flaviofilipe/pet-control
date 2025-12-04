@@ -145,8 +145,8 @@ O email inclui:
 
 ### Fluxo de execução
 
-1. 🔌 **Conecta ao banco de dados**
-2. 📊 **Busca tratamentos de amanhã** usando agregação MongoDB
+1. 🔌 **Conecta ao banco de dados PostgreSQL**
+2. 📊 **Busca tratamentos de amanhã** usando SQLAlchemy
 3. 👥 **Busca dados dos tutores** com emails válidos
 4. 📧 **Para cada pet com tratamentos:**
    - Formata dados para email
@@ -292,8 +292,8 @@ Mensagem: Processamento concluído: 1 emails enviados para 1 pets
 - ✅ Confirme se os tutores têm email cadastrado no perfil
 
 ### Erros de conexão com banco
-- ✅ Verifique se o MongoDB está rodando
-- ✅ Confirme a variável `MONGO_URI` no .env
+- ✅ Verifique se o PostgreSQL está rodando
+- ✅ Confirme a variável `DATABASE_URL` no .env
 - ✅ Teste a conectividade manual
 
 ## 📝 Logs

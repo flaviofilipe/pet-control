@@ -1,9 +1,14 @@
+"""
+Rotas de informações (vacinas, ectoparasitas, vermífugos)
+"""
+
 from typing import Optional
 import logging
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
-from starlette.responses import JSONResponse
-from ..repositories import InfoRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.repositories import InfoRepository
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
 
 logger = logging.getLogger(__name__)
@@ -15,9 +20,10 @@ router = APIRouter()
 
 
 @router.get("/vacinas")
-def get_vaccines_page(
+async def get_vaccines_page(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     search: Optional[str] = None,
     especie: Optional[str] = None,
     tipo: Optional[str] = None,
@@ -26,14 +32,14 @@ def get_vaccines_page(
     Renderiza a página de vacinas com informações detalhadas sobre cada tipo.
     """
     try:
-        info_repo = InfoRepository()
+        info_repo = InfoRepository(db)
         
         # Busca vacinas com filtros
-        vacinas = info_repo.search_vaccines(search, especie, tipo)
+        vacinas = await info_repo.search_vaccines(search, especie, tipo)
         
         # Busca opções para filtros
-        especies = info_repo.get_vaccine_species()
-        tipos = info_repo.get_vaccine_types()
+        especies = await info_repo.get_vaccine_species()
+        tipos = await info_repo.get_vaccine_types()
 
         return templates.TemplateResponse(
             "pages/vacinas.html",
@@ -58,9 +64,10 @@ def get_vaccines_page(
 
 
 @router.get("/ectoparasitas")
-def get_ectoparasites_page(
+async def get_ectoparasites_page(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     search: Optional[str] = None,
     especie: Optional[str] = None,
     tipo: Optional[str] = None,
@@ -69,14 +76,14 @@ def get_ectoparasites_page(
     Renderiza a página de ectoparasitas com informações detalhadas sobre cada tipo.
     """
     try:
-        info_repo = InfoRepository()
+        info_repo = InfoRepository(db)
         
         # Busca ectoparasitas com filtros
-        ectoparasitas = info_repo.search_ectoparasites(search, especie, tipo)
+        ectoparasitas = await info_repo.search_ectoparasites(search, especie, tipo)
         
         # Busca opções para filtros
-        especies = info_repo.get_ectoparasite_species()
-        tipos = info_repo.get_ectoparasite_types()
+        especies = await info_repo.get_ectoparasite_species()
+        tipos = await info_repo.get_ectoparasite_types()
 
         return templates.TemplateResponse(
             "pages/ectoparasitas.html",
@@ -101,9 +108,10 @@ def get_ectoparasites_page(
 
 
 @router.get("/vermifugos")
-def get_vermifugos_page(
+async def get_vermifugos_page(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     search: Optional[str] = None,
     especie: Optional[str] = None,
     tipo: Optional[str] = None,
@@ -112,14 +120,14 @@ def get_vermifugos_page(
     Renderiza a página de vermífugos com informações detalhadas sobre cada tipo.
     """
     try:
-        info_repo = InfoRepository()
+        info_repo = InfoRepository(db)
         
         # Busca vermífugos com filtros
-        vermifugos_list = info_repo.search_vermifugos(search, especie, tipo)
+        vermifugos_list = await info_repo.search_vermifugos(search, especie, tipo)
         
         # Busca opções para filtros
-        especies = info_repo.get_vermifugo_species()
-        tipos = info_repo.get_vermifugo_types()
+        especies = await info_repo.get_vermifugo_species()
+        tipos = await info_repo.get_vermifugo_types()
 
         return templates.TemplateResponse(
             "pages/vermifugos.html",
@@ -144,9 +152,10 @@ def get_vermifugos_page(
 
 
 @router.get("/api/vacinas/autocomplete")
-def get_vaccines_autocomplete(
+async def get_vaccines_autocomplete(
     q: str = Query(..., min_length=1, description="Termo de busca"),
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Endpoint para autocomplete de vacinas.
@@ -156,8 +165,8 @@ def get_vaccines_autocomplete(
         if len(q) < 1:
             return {"suggestions": []}
 
-        info_repo = InfoRepository()
-        suggestions = info_repo.get_vaccines_autocomplete(q)
+        info_repo = InfoRepository(db)
+        suggestions = await info_repo.get_vaccines_autocomplete(q)
 
         return {"suggestions": suggestions}
 
@@ -167,9 +176,10 @@ def get_vaccines_autocomplete(
 
 
 @router.get("/api/ectoparasitas/autocomplete")
-def get_ectoparasites_autocomplete(
+async def get_ectoparasites_autocomplete(
     q: str = Query(..., min_length=1, description="Termo de busca"),
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Endpoint para autocomplete de ectoparasitas.
@@ -179,8 +189,8 @@ def get_ectoparasites_autocomplete(
         if len(q) < 1:
             return {"suggestions": []}
 
-        info_repo = InfoRepository()
-        suggestions = info_repo.get_ectoparasites_autocomplete(q)
+        info_repo = InfoRepository(db)
+        suggestions = await info_repo.get_ectoparasites_autocomplete(q)
 
         return {"suggestions": suggestions}
 
@@ -190,9 +200,10 @@ def get_ectoparasites_autocomplete(
 
 
 @router.get("/api/vermifugos/autocomplete")
-def get_vermifugos_autocomplete(
+async def get_vermifugos_autocomplete(
     q: str = Query(..., min_length=1, description="Termo de busca"),
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Endpoint para autocomplete de vermífugos.
@@ -202,8 +213,8 @@ def get_vermifugos_autocomplete(
         if len(q) < 1:
             return {"suggestions": []}
 
-        info_repo = InfoRepository()
-        suggestions = info_repo.get_vermifugos_autocomplete(q)
+        info_repo = InfoRepository(db)
+        suggestions = await info_repo.get_vermifugos_autocomplete(q)
 
         return {"suggestions": suggestions}
 

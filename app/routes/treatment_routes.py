@@ -1,8 +1,14 @@
+"""
+Rotas de tratamentos
+"""
+
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Depends, Form, status
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
-from ..services import PetService
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import PetService
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
 
 # Configuração do Jinja2
@@ -12,14 +18,15 @@ router = APIRouter()
 
 
 @router.get("/pets/{pet_id}/treatments/add")
-def add_treatment_page(
+async def add_treatment_page(
     pet_id: str,
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """Renderiza página para adicionar tratamento ao pet"""
-    pet_service = PetService()
-    pet = pet_service.get_pet_details(pet_id, user["id"])
+    pet_service = PetService(db)
+    pet = await pet_service.get_pet_details(pet_id, user["id"])
     
     if not pet:
         raise HTTPException(status_code=404, detail="Pet not found.")
@@ -31,9 +38,10 @@ def add_treatment_page(
 
 
 @router.post("/pets/{pet_id}/treatments")
-def create_or_update_treatment(
+async def create_or_update_treatment(
     pet_id: str,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     treatment_id: Optional[str] = Form(None),
     category: str = Form(...),
     name: str = Form(...),
@@ -46,7 +54,7 @@ def create_or_update_treatment(
     done: bool = Form(False),
 ):
     """Cria ou atualiza um tratamento para o pet"""
-    pet_service = PetService()
+    pet_service = PetService(db)
 
     treatment_data = {
         "category": category,
@@ -62,12 +70,12 @@ def create_or_update_treatment(
 
     if treatment_id:
         # Lógica de atualização
-        success, message = pet_service.update_treatment(pet_id, treatment_id, user["id"], treatment_data)
+        success, message = await pet_service.update_treatment(pet_id, treatment_id, user["id"], treatment_data)
         if not success:
             raise HTTPException(status_code=404, detail=message)
     else:
         # Lógica de criação
-        success, message = pet_service.add_treatment(pet_id, user["id"], treatment_data)
+        success, message = await pet_service.add_treatment(pet_id, user["id"], treatment_data)
         if not success:
             raise HTTPException(status_code=404, detail=message)
 
@@ -77,15 +85,16 @@ def create_or_update_treatment(
 
 
 @router.get("/pets/{pet_id}/treatments/{treatment_id}/edit")
-def edit_treatment_page(
+async def edit_treatment_page(
     pet_id: str,
     treatment_id: str,
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """Renderiza página para editar tratamento"""
-    pet_service = PetService()
-    pet = pet_service.get_pet_details(pet_id, user["id"])
+    pet_service = PetService(db)
+    pet = await pet_service.get_pet_details(pet_id, user["id"])
     
     if not pet:
         raise HTTPException(status_code=404, detail="Pet not found.")
@@ -110,14 +119,15 @@ def edit_treatment_page(
 
 
 @router.post("/pets/{pet_id}/treatments/{treatment_id}/delete")
-def delete_treatment(
+async def delete_treatment(
     pet_id: str,
     treatment_id: str,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """Remove tratamento do pet"""
-    pet_service = PetService()
-    success, message = pet_service.delete_treatment(pet_id, treatment_id, user["id"])
+    pet_service = PetService(db)
+    success, message = await pet_service.delete_treatment(pet_id, treatment_id, user["id"])
 
     if not success:
         raise HTTPException(status_code=404, detail=message)

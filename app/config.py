@@ -43,14 +43,21 @@ if IS_PRODUCTION and SESSION_SECRET_KEY == "your-super-secret-key-here":
 # CORS configuration
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:8000")
 
-# Database configuration
-DB_NAME = os.environ.get("DB_NAME", "pet_control")
-COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "profiles")
-PETS_COLLECTION_NAME = os.environ.get("PETS_COLLECTION_NAME", "pets")
-VACCINES_COLLECTION_NAME = os.environ.get("VACCINES_COLLECTION_NAME", "vaccines")
-ECTOPARASITES_COLLECTION_NAME = os.environ.get("ECTOPARASITES_COLLECTION_NAME", "ectoparasites")
-VERMIFUGOS_COLLECTION_NAME = os.environ.get("VERMIFUGOS_COLLECTION_NAME", "vermifugos")
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+# Database configuration (PostgreSQL)
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+asyncpg://pet_control_user:pet_control_pass@localhost:5432/pet_control"
+)
+
+# Pool de conexões
+DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "20"))
+DB_MAX_OVERFLOW = int(os.environ.get("DB_MAX_OVERFLOW", "10"))
+DB_POOL_TIMEOUT = int(os.environ.get("DB_POOL_TIMEOUT", "30"))
+DB_POOL_RECYCLE = int(os.environ.get("DB_POOL_RECYCLE", "3600"))
+
+# Auto migrations/seeds
+AUTO_RUN_MIGRATIONS = os.environ.get("AUTO_RUN_MIGRATIONS", "false").lower() == "true"
+AUTO_RUN_SEEDS = os.environ.get("AUTO_RUN_SEEDS", "false").lower() == "true"
 
 # File upload configuration
 UPLOAD_DIR = "uploads"

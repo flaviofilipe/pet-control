@@ -1,286 +1,403 @@
-from typing import Dict, Any, Optional, List
+"""
+Repository para operações com pets usando SQLAlchemy
+"""
+
+import uuid
 import logging
-from bson import ObjectId
-from bson.errors import InvalidId
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
-from .base_repository import BaseRepository
-from ..database import database
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from app.database.models.pet import Pet
+from app.database.models.pet_owner import PetOwner
+from app.database.models.treatment import Treatment
+from app.repositories.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class PetRepository(BaseRepository):
+class PetRepository(BaseRepository[Pet]):
     """Repository para operações com pets"""
     
-    def __init__(self):
-        super().__init__(database.pets_collection)
+    def __init__(self, session: AsyncSession):
+        super().__init__(Pet, session)
     
-    def get_pets_by_user(self, user_id: str) -> List[Dict[str, Any]]:
+    async def get_pets_by_user(self, user_id: str) -> List[Dict[str, Any]]:
         """Busca pets de um usuário (não deletados)"""
-        pets = self.find({"users": user_id, "deleted_at": None})
-        for pet in pets:
-            pet["_id"] = str(pet["_id"])
-            if "treatments" in pet:
-                for treatment in pet["treatments"]:
-                    treatment["_id"] = str(treatment["_id"])
-        return pets
+        query = (
+            select(Pet)
+            .join(PetOwner)
+            .where(
+                PetOwner.profile_id == user_id,
+                PetOwner.deleted_at == None,  # noqa: E711
+                Pet.deleted_at == None  # noqa: E711
+            )
+            .options(
+                selectinload(Pet.owners),
+                selectinload(Pet.treatments)
+            )
+        )
+        
+        result = await self.session.execute(query)
+        pets = result.unique().scalars().all()
+        return [pet.to_dict() for pet in pets]
     
-    def get_pet_by_id(self, pet_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_pet_by_id(self, pet_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Busca pet por ID (verificando acesso do usuário)"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
-                return None
+            query = (
+                select(Pet)
+                .join(PetOwner)
+                .where(
+                    Pet.id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+                .options(
+                    selectinload(Pet.owners),
+                    selectinload(Pet.treatments)
+                )
+            )
             
-            pet = self.find_one({
-                "_id": ObjectId(pet_id),
-                "users": user_id,
-                "deleted_at": None
-            })
-            if pet:
-                pet["_id"] = str(pet["_id"])
-                if "treatments" in pet:
-                    for treatment in pet["treatments"]:
-                        treatment["_id"] = str(treatment["_id"])
-            return pet
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return None
+            result = await self.session.execute(query)
+            pet = result.unique().scalar_one_or_none()
+            return pet.to_dict() if pet else None
         except Exception as e:
             logger.error(f"Error fetching pet by id: {e}")
             return None
     
-    def get_pet_by_nickname(self, nickname: str) -> Optional[Dict[str, Any]]:
+    async def get_pet_by_nickname(self, nickname: str) -> Optional[Dict[str, Any]]:
         """Busca pet por nickname"""
-        pet = self.find_one({"nickname": nickname, "deleted_at": None})
-        if pet:
-            pet["_id"] = str(pet["_id"])
-            if "users" in pet:
-                pet["users"] = [str(uid) for uid in pet["users"]]
-            if "treatments" in pet:
-                for treatment in pet["treatments"]:
-                    treatment["_id"] = str(treatment["_id"])
-        return pet
+        query = (
+            select(Pet)
+            .where(
+                Pet.nickname == nickname,
+                Pet.deleted_at == None  # noqa: E711
+            )
+            .options(
+                selectinload(Pet.owners),
+                selectinload(Pet.treatments)
+            )
+        )
+        
+        result = await self.session.execute(query)
+        pet = result.unique().scalar_one_or_none()
+        return pet.to_dict() if pet else None
     
-    def create_pet(self, pet_data: Dict[str, Any]) -> str:
+    async def create_pet(self, pet_data: Dict[str, Any]) -> str:
         """Cria um novo pet"""
-        result = self.collection.insert_one(pet_data)
-        return str(result.inserted_id)
+        users = pet_data.pop("users", [])
+        pet_data.pop("treatments", None)
+        pet_data.pop("deleted_at", None)
+        
+        # Gerar ID único
+        pet_id = str(uuid.uuid4())
+        pet_data["id"] = pet_id
+        
+        pet = Pet(**pet_data)
+        self.session.add(pet)
+        await self.session.flush()
+        
+        # Adicionar owners
+        for user_id in users:
+            owner = PetOwner(pet_id=pet_id, profile_id=user_id)
+            self.session.add(owner)
+        
+        await self.session.flush()
+        return pet_id
     
-    def update_pet(self, pet_id: str, user_id: str, update_data: Dict[str, Any]) -> bool:
+    async def update_pet(self, pet_id: str, user_id: str, update_data: Dict[str, Any]) -> bool:
         """Atualiza um pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
+            # Verificar acesso
+            query = (
+                select(Pet)
+                .join(PetOwner)
+                .where(
+                    Pet.id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            pet = result.scalar_one_or_none()
+            
+            if not pet:
                 return False
             
-            filter_query = {
-                "_id": ObjectId(pet_id),
-                "users": user_id,
-                "deleted_at": None
-            }
-            return self.update_one(filter_query, {"$set": update_data})
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return False
+            # Remover campos que não devem ser atualizados
+            update_data.pop("_id", None)
+            update_data.pop("users", None)
+            update_data.pop("treatments", None)
+            update_data.pop("deleted_at", None)
+            
+            for key, value in update_data.items():
+                if hasattr(pet, key):
+                    setattr(pet, key, value)
+            
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error updating pet: {e}")
             return False
     
-    def soft_delete_pet(self, pet_id: str, user_id: str) -> bool:
+    async def soft_delete_pet(self, pet_id: str, user_id: str) -> bool:
         """Faz soft delete do pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
+            query = (
+                select(Pet)
+                .join(PetOwner)
+                .where(
+                    Pet.id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            pet = result.scalar_one_or_none()
+            
+            if not pet:
                 return False
             
-            filter_query = {
-                "_id": ObjectId(pet_id),
-                "users": user_id,
-                "deleted_at": None
-            }
-            return self.update_one(filter_query, {"$set": {"deleted_at": datetime.now()}})
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return False
+            pet.soft_delete()
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error soft deleting pet: {e}")
             return False
     
-    def check_nickname_exists(self, nickname: str) -> bool:
+    async def check_nickname_exists(self, nickname: str) -> bool:
         """Verifica se nickname já existe"""
-        return self.find_one({"nickname": nickname}) is not None
+        query = select(Pet).where(Pet.nickname == nickname)
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none() is not None
     
-    def grant_vet_access(self, pet_id: str, vet_id: str) -> bool:
+    async def grant_vet_access(self, pet_id: str, vet_id: str) -> bool:
         """Concede acesso de veterinário ao pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
-                return False
-            
-            result = self.collection.update_one(
-                {"_id": ObjectId(pet_id)},
-                {"$addToSet": {"users": vet_id}}
+            # Verificar se já tem acesso
+            query = (
+                select(PetOwner)
+                .where(
+                    PetOwner.pet_id == pet_id,
+                    PetOwner.profile_id == vet_id
+                )
             )
-            return result.modified_count > 0
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return False
+            result = await self.session.execute(query)
+            existing = result.scalar_one_or_none()
+            
+            if existing:
+                if existing.deleted_at:
+                    existing.restore()
+                    await self.session.flush()
+                    return True
+                return False  # Já tem acesso
+            
+            # Criar novo acesso
+            owner = PetOwner(pet_id=pet_id, profile_id=vet_id)
+            self.session.add(owner)
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error granting vet access: {e}")
             return False
     
-    def revoke_vet_access(self, pet_id: str, vet_id: str) -> bool:
+    async def revoke_vet_access(self, pet_id: str, vet_id: str) -> bool:
         """Remove acesso de veterinário ao pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
+            query = (
+                select(PetOwner)
+                .where(
+                    PetOwner.pet_id == pet_id,
+                    PetOwner.profile_id == vet_id,
+                    PetOwner.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            owner = result.scalar_one_or_none()
+            
+            if not owner:
                 return False
             
-            result = self.collection.update_one(
-                {"_id": ObjectId(pet_id)},
-                {"$pull": {"users": vet_id}}
-            )
-            return result.modified_count > 0
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return False
+            owner.soft_delete()
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error revoking vet access: {e}")
             return False
     
-    def add_treatment(self, pet_id: str, user_id: str, treatment_data: Dict[str, Any]) -> bool:
+    async def add_treatment(self, pet_id: str, user_id: str, treatment_data: Dict[str, Any]) -> bool:
         """Adiciona tratamento ao pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format: {pet_id}")
+            # Verificar acesso
+            query = (
+                select(Pet)
+                .join(PetOwner)
+                .where(
+                    Pet.id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            pet = result.scalar_one_or_none()
+            
+            if not pet:
                 return False
             
-            treatment_data["_id"] = ObjectId()
-            result = self.collection.update_one(
-                {
-                    "_id": ObjectId(pet_id),
-                    "users": user_id,
-                    "deleted_at": None
-                },
-                {"$push": {"treatments": treatment_data}}
+            # Criar tratamento
+            treatment_id = str(uuid.uuid4())
+            treatment = Treatment(
+                id=treatment_id,
+                pet_id=pet_id,
+                category=treatment_data.get("category"),
+                name=treatment_data.get("name"),
+                description=treatment_data.get("description"),
+                date=treatment_data.get("date"),
+                time=treatment_data.get("time"),
+                done=treatment_data.get("done", False),
+                applier_type=treatment_data.get("applier_type"),
+                applier_name=treatment_data.get("applier_name"),
+                applier_id=treatment_data.get("applier_id"),
             )
-            return result.matched_count > 0
-        except InvalidId as e:
-            logger.error(f"InvalidId error for pet_id {pet_id}: {e}")
-            return False
+            
+            self.session.add(treatment)
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error adding treatment: {e}")
             return False
     
-    def update_treatment(self, pet_id: str, user_id: str, treatment_id: str, treatment_data: Dict[str, Any]) -> bool:
+    async def update_treatment(
+        self,
+        pet_id: str,
+        user_id: str,
+        treatment_id: str,
+        treatment_data: Dict[str, Any]
+    ) -> bool:
         """Atualiza tratamento do pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format for pet_id: {pet_id}")
-                return False
-            if not ObjectId.is_valid(treatment_id):
-                logger.warning(f"Invalid ObjectId format for treatment_id: {treatment_id}")
+            # Verificar acesso
+            query = (
+                select(Treatment)
+                .join(Pet)
+                .join(PetOwner)
+                .where(
+                    Treatment.id == treatment_id,
+                    Treatment.pet_id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            treatment = result.scalar_one_or_none()
+            
+            if not treatment:
                 return False
             
-            treatment_data["_id"] = ObjectId(treatment_id)
-            result = self.collection.update_one(
-                {
-                    "_id": ObjectId(pet_id),
-                    "users": user_id,
-                    "deleted_at": None,
-                    "treatments._id": ObjectId(treatment_id)
-                },
-                {"$set": {"treatments.$": treatment_data}}
-            )
-            return result.matched_count > 0
-        except InvalidId as e:
-            logger.error(f"InvalidId error: {e}")
-            return False
+            # Atualizar campos
+            for key, value in treatment_data.items():
+                if key != "_id" and hasattr(treatment, key):
+                    setattr(treatment, key, value)
+            
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error updating treatment: {e}")
             return False
     
-    def delete_treatment(self, pet_id: str, user_id: str, treatment_id: str) -> bool:
+    async def delete_treatment(self, pet_id: str, user_id: str, treatment_id: str) -> bool:
         """Remove tratamento do pet"""
         try:
-            if not ObjectId.is_valid(pet_id):
-                logger.warning(f"Invalid ObjectId format for pet_id: {pet_id}")
-                return False
-            if not ObjectId.is_valid(treatment_id):
-                logger.warning(f"Invalid ObjectId format for treatment_id: {treatment_id}")
+            # Verificar acesso
+            query = (
+                select(Treatment)
+                .join(Pet)
+                .join(PetOwner)
+                .where(
+                    Treatment.id == treatment_id,
+                    Treatment.pet_id == pet_id,
+                    PetOwner.profile_id == user_id,
+                    PetOwner.deleted_at == None,  # noqa: E711
+                    Pet.deleted_at == None  # noqa: E711
+                )
+            )
+            
+            result = await self.session.execute(query)
+            treatment = result.scalar_one_or_none()
+            
+            if not treatment:
                 return False
             
-            result = self.collection.update_one(
-                {
-                    "_id": ObjectId(pet_id),
-                    "users": user_id,
-                    "deleted_at": None
-                },
-                {"$pull": {"treatments": {"_id": ObjectId(treatment_id)}}}
-            )
-            return result.matched_count > 0 and result.modified_count > 0
-        except InvalidId as e:
-            logger.error(f"InvalidId error: {e}")
-            return False
+            await self.session.delete(treatment)
+            await self.session.flush()
+            return True
         except Exception as e:
             logger.error(f"Error deleting treatment: {e}")
             return False
     
-    def get_scheduled_treatments_for_date(self, target_date: str) -> List[Dict[str, Any]]:
+    async def get_scheduled_treatments_for_date(self, target_date: str) -> List[Dict[str, Any]]:
         """
         Busca todos os tratamentos agendados para uma data específica
         target_date: data no formato "YYYY-MM-DD"
-        Retorna lista de pets com seus tratamentos agendados
         """
         try:
-            # Busca pets não deletados que têm tratamentos na data alvo
-            pipeline = [
-                {"$match": {"deleted_at": None}},
-                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
-                {"$match": {
-                    "treatments.date": target_date,
-                    "treatments.done": False
-                }},
-                {"$group": {
-                    "_id": "$_id",
-                    "name": {"$first": "$name"},
-                    "nickname": {"$first": "$nickname"},
-                    "users": {"$first": "$users"},
-                    "treatments": {"$push": "$treatments"}
-                }}
-            ]
+            query = (
+                select(Pet)
+                .join(Treatment)
+                .where(
+                    Pet.deleted_at == None,  # noqa: E711
+                    Treatment.date == target_date,
+                    Treatment.done == False  # noqa: E712
+                )
+                .options(
+                    selectinload(Pet.owners),
+                    selectinload(Pet.treatments)
+                )
+            )
             
-            results = list(self.collection.aggregate(pipeline))
+            result = await self.session.execute(query)
+            pets = result.unique().scalars().all()
             
-            # Converte ObjectIds para strings
-            for result in results:
-                result["_id"] = str(result["_id"])
-                result["users"] = [str(user_id) for user_id in result["users"]]
-                for treatment in result["treatments"]:
-                    treatment["_id"] = str(treatment["_id"])
+            results = []
+            for pet in pets:
+                pet_dict = {
+                    "_id": pet.id,
+                    "name": pet.name,
+                    "nickname": pet.nickname,
+                    "users": [owner.profile_id for owner in pet.owners if not owner.deleted_at],
+                    "treatments": [
+                        t.to_dict() for t in pet.treatments
+                        if t.date == target_date and not t.done
+                    ]
+                }
+                results.append(pet_dict)
             
             return results
         except Exception as e:
             logger.error(f"Error fetching scheduled treatments: {e}")
             return []
     
-    def get_tomorrow_scheduled_treatments(self) -> List[Dict[str, Any]]:
-        """
-        Busca todos os tratamentos agendados para amanhã
-        Retorna lista de pets com seus tratamentos agendados
-        """
+    async def get_tomorrow_scheduled_treatments(self) -> List[Dict[str, Any]]:
+        """Busca todos os tratamentos agendados para amanhã"""
         tomorrow = datetime.now() + timedelta(days=1)
         tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-        return self.get_scheduled_treatments_for_date(tomorrow_str)
+        return await self.get_scheduled_treatments_for_date(tomorrow_str)
     
-    def get_current_month_treatments(self) -> List[Dict[str, Any]]:
-        """
-        Busca todos os tratamentos agendados para o mês atual
-        Retorna lista de pets com seus tratamentos agendados
-        """
+    async def get_current_month_treatments(self) -> List[Dict[str, Any]]:
+        """Busca todos os tratamentos agendados para o mês atual"""
         try:
-            # Primeiro e último dia do mês atual
             now = datetime.now()
             first_day = now.replace(day=1).strftime("%Y-%m-%d")
             if now.month == 12:
@@ -289,72 +406,83 @@ class PetRepository(BaseRepository):
                 last_day = now.replace(month=now.month + 1, day=1) - timedelta(days=1)
             last_day_str = last_day.strftime("%Y-%m-%d")
             
-            # Pipeline para buscar tratamentos do mês
-            pipeline = [
-                {"$match": {"deleted_at": None}},
-                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
-                {"$match": {
-                    "treatments.date": {"$gte": first_day, "$lte": last_day_str},
-                    "treatments.done": False
-                }},
-                {"$group": {
-                    "_id": "$_id",
-                    "name": {"$first": "$name"},
-                    "nickname": {"$first": "$nickname"},
-                    "users": {"$first": "$users"},
-                    "treatments": {"$push": "$treatments"}
-                }}
-            ]
+            query = (
+                select(Pet)
+                .join(Treatment)
+                .where(
+                    Pet.deleted_at == None,  # noqa: E711
+                    Treatment.date >= first_day,
+                    Treatment.date <= last_day_str,
+                    Treatment.done == False  # noqa: E712
+                )
+                .options(
+                    selectinload(Pet.owners),
+                    selectinload(Pet.treatments)
+                )
+            )
             
-            results = list(self.collection.aggregate(pipeline))
+            result = await self.session.execute(query)
+            pets = result.unique().scalars().all()
             
-            # Converte ObjectIds para strings
-            for result in results:
-                result["_id"] = str(result["_id"])
-                result["users"] = [str(user_id) for user_id in result["users"]]
-                for treatment in result["treatments"]:
-                    treatment["_id"] = str(treatment["_id"])
+            results = []
+            for pet in pets:
+                pet_dict = {
+                    "_id": pet.id,
+                    "name": pet.name,
+                    "nickname": pet.nickname,
+                    "users": [owner.profile_id for owner in pet.owners if not owner.deleted_at],
+                    "treatments": [
+                        t.to_dict() for t in pet.treatments
+                        if first_day <= t.date <= last_day_str and not t.done
+                    ]
+                }
+                if pet_dict["treatments"]:
+                    results.append(pet_dict)
             
             return results
         except Exception as e:
             logger.error(f"Error fetching current month treatments: {e}")
             return []
     
-    def get_expired_treatments(self) -> List[Dict[str, Any]]:
-        """
-        Busca todos os tratamentos expirados (data anterior a hoje e não concluídos)
-        Retorna lista de pets com seus tratamentos expirados
-        """
+    async def get_expired_treatments(self) -> List[Dict[str, Any]]:
+        """Busca todos os tratamentos expirados"""
         try:
             today = datetime.now().strftime("%Y-%m-%d")
             
-            # Pipeline para buscar tratamentos expirados
-            pipeline = [
-                {"$match": {"deleted_at": None}},
-                {"$unwind": {"path": "$treatments", "preserveNullAndEmptyArrays": False}},
-                {"$match": {
-                    "treatments.date": {"$lt": today},
-                    "treatments.done": False
-                }},
-                {"$group": {
-                    "_id": "$_id",
-                    "name": {"$first": "$name"},
-                    "nickname": {"$first": "$nickname"},
-                    "users": {"$first": "$users"},
-                    "treatments": {"$push": "$treatments"}
-                }}
-            ]
+            query = (
+                select(Pet)
+                .join(Treatment)
+                .where(
+                    Pet.deleted_at == None,  # noqa: E711
+                    Treatment.date < today,
+                    Treatment.done == False  # noqa: E712
+                )
+                .options(
+                    selectinload(Pet.owners),
+                    selectinload(Pet.treatments)
+                )
+            )
             
-            results = list(self.collection.aggregate(pipeline))
+            result = await self.session.execute(query)
+            pets = result.unique().scalars().all()
             
-            # Converte ObjectIds para strings
-            for result in results:
-                result["_id"] = str(result["_id"])
-                result["users"] = [str(user_id) for user_id in result["users"]]
-                for treatment in result["treatments"]:
-                    treatment["_id"] = str(treatment["_id"])
+            results = []
+            for pet in pets:
+                pet_dict = {
+                    "_id": pet.id,
+                    "name": pet.name,
+                    "nickname": pet.nickname,
+                    "users": [owner.profile_id for owner in pet.owners if not owner.deleted_at],
+                    "treatments": [
+                        t.to_dict() for t in pet.treatments
+                        if t.date < today and not t.done
+                    ]
+                }
+                if pet_dict["treatments"]:
+                    results.append(pet_dict)
             
             return results
         except Exception as e:
             logger.error(f"Error fetching expired treatments: {e}")
             return []
+

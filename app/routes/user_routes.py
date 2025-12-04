@@ -1,7 +1,13 @@
+"""
+Rotas de usuário/perfil
+"""
+
 from fastapi import APIRouter, Request, Depends, Form, status
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
-from ..services import UserService
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import UserService
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
 
 # Configuração do Jinja2
@@ -11,14 +17,16 @@ router = APIRouter()
 
 
 @router.get("/profile")
-def get_user_profile(
-    request: Request, user: dict = Depends(get_current_user_from_session)
+async def get_user_profile(
+    request: Request,
+    user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Exibe o perfil do usuário logado em uma página HTML.
     """
-    user_service = UserService()
-    profile_data = user_service.get_user_profile(user["id"], user["info"])
+    user_service = UserService(db)
+    profile_data = await user_service.get_user_profile(user["id"], user["info"])
 
     return templates.TemplateResponse(
         "profile.html",
@@ -30,14 +38,16 @@ def get_user_profile(
 
 
 @router.get("/profile/edit")
-def edit_user_profile_page(
-    request: Request, user: dict = Depends(get_current_user_from_session)
+async def edit_user_profile_page(
+    request: Request,
+    user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Renderiza a página com o formulário para editar o perfil do usuário.
     """
-    user_service = UserService()
-    profile_data = user_service.get_user_profile(user["id"], user["info"])
+    user_service = UserService(db)
+    profile_data = await user_service.get_user_profile(user["id"], user["info"])
 
     # Verifica se há mensagens na sessão
     profile_message = request.session.pop("profile_message", None)
@@ -55,8 +65,9 @@ def edit_user_profile_page(
 
 
 @router.post("/profile")
-def create_or_update_user_profile(
+async def create_or_update_user_profile(
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     name: str = Form(...),
     bio: str | None = Form(None),
     street: str | None = Form(None),
@@ -68,7 +79,7 @@ def create_or_update_user_profile(
     """
     Cria ou atualiza um perfil de usuário a partir dos dados do formulário HTML.
     """
-    user_service = UserService()
+    user_service = UserService(db)
     
     profile_data = {
         "_id": user["id"],
@@ -84,8 +95,8 @@ def create_or_update_user_profile(
     }
 
     user_email = user["info"].get("email")
-    
-    success, message = user_service.create_or_update_profile(
+
+    success, message = await user_service.create_or_update_profile(
         user["id"], profile_data, user_email
     )
 

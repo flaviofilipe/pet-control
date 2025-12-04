@@ -58,7 +58,7 @@ def callback(request: Request, code: str):
             logger.info("✅ User info cached in session")
         except Exception as e:
             logger.warning(f"⚠️ Failed to cache user info: {str(e)}")
-        
+
         # Armazena ambos os tokens na sessão
         request.session["access_token"] = access_token
         request.session["refresh_token"] = refresh_token

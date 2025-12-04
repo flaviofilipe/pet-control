@@ -1,15 +1,19 @@
+"""
+Serviço para relatórios mensais de tratamentos
+"""
+
 import smtplib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.pet_repository import PetRepository
-from ..repositories.user_repository import UserRepository
-from ..config import (
+from app.repositories import PetRepository, UserRepository
+from app.config import (
     GMAIL_EMAIL, 
     GMAIL_PASSWORD, 
     GMAIL_SMTP_SERVER, 
@@ -21,9 +25,10 @@ from ..config import (
 class MonthlyReportService:
     """Serviço para relatórios mensais de tratamentos"""
     
-    def __init__(self):
-        self.pet_repo = PetRepository()
-        self.user_repo = UserRepository()
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.pet_repo = PetRepository(session)
+        self.user_repo = UserRepository(session)
         self.logger = logging.getLogger(__name__)
         
         # Configura Jinja2 para templates
@@ -31,17 +36,17 @@ class MonthlyReportService:
         template_dir.mkdir(exist_ok=True)
         self.jinja_env = Environment(loader=FileSystemLoader(template_dir))
     
-    def get_monthly_treatments_with_tutors(self) -> Tuple[bool, List[Dict[str, Any]], str]:
+    async def get_monthly_treatments_with_tutors(self) -> Tuple[bool, List[Dict[str, Any]], str]:
         """
         Busca tratamentos do mês atual e expirados com dados dos tutores
         Retorna: (sucesso, lista_tratamentos_com_tutores, mensagem)
         """
         try:
             # Busca tratamentos do mês atual
-            current_month_treatments = self.pet_repo.get_current_month_treatments()
+            current_month_treatments = await self.pet_repo.get_current_month_treatments()
             
             # Busca tratamentos expirados
-            expired_treatments = self.pet_repo.get_expired_treatments()
+            expired_treatments = await self.pet_repo.get_expired_treatments()
             
             # Combina todos os tratamentos
             all_treatments = {}
@@ -84,7 +89,7 @@ class MonthlyReportService:
             
             for pet_data in all_treatments.values():
                 # Busca emails dos tutores
-                tutors = self.user_repo.get_user_emails_by_ids(pet_data["users"])
+                tutors = await self.user_repo.get_user_emails_by_ids(pet_data["users"])
                 
                 # Só adiciona se houver tutores com email
                 if tutors:
@@ -109,108 +114,11 @@ class MonthlyReportService:
             self.logger.error(f"Erro ao buscar tratamentos mensais: {e}")
             return False, [], f"Erro ao buscar tratamentos: {str(e)}"
     
-    def format_treatments_for_monthly_email(self, pet_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Formata dados de tratamentos mensais para o template de email
-        """
-        now = datetime.now()
-        current_month_name = now.strftime("%B de %Y")
-        
-        # Formata tratamentos do mês atual
-        formatted_current = []
-        for treatment in pet_data["current_month_treatments"]:
-            formatted_treatment = {
-                "name": treatment.get("name", "Tratamento"),
-                "category": treatment.get("category", "Não especificado"),
-                "description": treatment.get("description", ""),
-                "date": treatment.get("date", ""),
-                "time": treatment.get("time", "Não especificado"),
-                "applier_type": treatment.get("applier_type", "Não especificado"),
-                "applier_name": treatment.get("applier_name", ""),
-                "status": "Agendado"
-            }
-            formatted_current.append(formatted_treatment)
-        
-        # Formata tratamentos expirados
-        formatted_expired = []
-        for treatment in pet_data["expired_treatments"]:
-            # Calcula quantos dias está atrasado
-            treatment_date = datetime.strptime(treatment.get("date", ""), "%Y-%m-%d")
-            days_late = (now - treatment_date).days
-            
-            formatted_treatment = {
-                "name": treatment.get("name", "Tratamento"),
-                "category": treatment.get("category", "Não especificado"),
-                "description": treatment.get("description", ""),
-                "date": treatment.get("date", ""),
-                "time": treatment.get("time", "Não especificado"),
-                "applier_type": treatment.get("applier_type", "Não especificado"),
-                "applier_name": treatment.get("applier_name", ""),
-                "status": "Expirado",
-                "days_late": days_late
-            }
-            formatted_expired.append(formatted_treatment)
-        
-        return {
-            "pet_name": pet_data["pet"]["name"],
-            "pet_nickname": pet_data["pet"]["nickname"],
-            "current_month": current_month_name,
-            "current_month_treatments": formatted_current,
-            "expired_treatments": formatted_expired,
-            "total_current_treatments": len(formatted_current),
-            "total_expired_treatments": len(formatted_expired),
-            "has_current_treatments": len(formatted_current) > 0,
-            "has_expired_treatments": len(formatted_expired) > 0
-        }
-    
-    def send_monthly_email_notification(self, tutor_email: str, tutor_name: str, email_data: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, str]:
-        """
-        Envia email de relatório mensal para um tutor
-        """
-        try:
-            # Carrega template de email mensal
-            template = self.jinja_env.get_template("monthly_treatment_report.html")
-            
-            # Renderiza o conteúdo do email
-            html_content = template.render(
-                tutor_name=tutor_name,
-                **email_data
-            )
-            
-            # Se for dry-run, só retorna sucesso sem enviar
-            if dry_run:
-                self.logger.info(f"[DRY RUN] Relatório mensal seria enviado para {tutor_email}")
-                return True, f"[DRY RUN] Relatório mensal preparado para {tutor_email}"
-            
-            # Valida configuração do Gmail
-            is_valid, validation_message = validate_gmail_config()
-            if not is_valid:
-                return False, validation_message
-            
-            # Cria mensagem de email
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"📋 Relatório Mensal - Tratamentos de {email_data['pet_name']} ({email_data['current_month']})"
-            msg['From'] = GMAIL_EMAIL
-            msg['To'] = tutor_email
-            
-            # Anexa conteúdo HTML
-            html_part = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(html_part)
-            
-            # Conecta ao servidor SMTP e envia
-            with smtplib.SMTP(GMAIL_SMTP_SERVER, GMAIL_SMTP_PORT) as server:
-                server.starttls()
-                server.login(GMAIL_EMAIL, GMAIL_PASSWORD)
-                server.send_message(msg)
-            
-            self.logger.info(f"Relatório mensal enviado com sucesso para {tutor_email}")
-            return True, f"Relatório mensal enviado para {tutor_email}"
-            
-        except Exception as e:
-            self.logger.error(f"Erro ao enviar relatório mensal para {tutor_email}: {e}")
-            return False, f"Erro ao enviar relatório mensal para {tutor_email}: {str(e)}"
-    
-    def format_consolidated_report_for_email(self, tutor: Dict[str, Any], pets_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def format_consolidated_report_for_email(
+        self,
+        tutor: Dict[str, Any],
+        pets_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Formata dados consolidados de múltiplos pets para um único email
         """
@@ -282,7 +190,13 @@ class MonthlyReportService:
             "report_date": now.strftime("%d/%m/%Y")
         }
     
-    def send_consolidated_monthly_email(self, tutor_email: str, tutor_name: str, consolidated_data: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, str]:
+    def send_consolidated_monthly_email(
+        self,
+        tutor_email: str,
+        tutor_name: str,
+        consolidated_data: Dict[str, Any],
+        dry_run: bool = False
+    ) -> Tuple[bool, str]:
         """
         Envia email consolidado de relatório mensal para um tutor (todos os pets)
         """
@@ -298,7 +212,10 @@ class MonthlyReportService:
             
             # Se for dry-run, só retorna sucesso sem enviar
             if dry_run:
-                self.logger.info(f"[DRY RUN] Relatório mensal consolidado seria enviado para {tutor_email} ({consolidated_data['total_pets']} pets)")
+                self.logger.info(
+                    f"[DRY RUN] Relatório mensal consolidado seria enviado para {tutor_email} "
+                    f"({consolidated_data['total_pets']} pets)"
+                )
                 return True, f"[DRY RUN] Relatório consolidado preparado para {tutor_email}"
             
             # Valida configuração do Gmail
@@ -308,7 +225,10 @@ class MonthlyReportService:
             
             # Cria mensagem de email
             msg = MIMEMultipart('alternative')
-            subject = f"📋 Relatório Mensal Consolidado - {consolidated_data['total_pets']} pets ({consolidated_data['current_month']})"
+            subject = (
+                f"📋 Relatório Mensal Consolidado - {consolidated_data['total_pets']} pets "
+                f"({consolidated_data['current_month']})"
+            )
             msg['Subject'] = subject
             msg['From'] = GMAIL_EMAIL
             msg['To'] = tutor_email
@@ -330,7 +250,7 @@ class MonthlyReportService:
             self.logger.error(f"Erro ao enviar relatório consolidado para {tutor_email}: {e}")
             return False, f"Erro ao enviar relatório consolidado para {tutor_email}: {str(e)}"
 
-    def process_monthly_reports(self, dry_run: bool = False) -> Dict[str, Any]:
+    async def process_monthly_reports(self, dry_run: bool = False) -> Dict[str, Any]:
         """
         Processa todos os relatórios mensais de tratamentos
         NOVA VERSÃO: Consolida por tutor (1 email por tutor com todos os seus pets)
@@ -338,7 +258,7 @@ class MonthlyReportService:
         self.logger.info("Iniciando processamento de relatórios mensais consolidados")
         
         # Busca tratamentos do mês e expirados
-        success, treatments_data, message = self.get_monthly_treatments_with_tutors()
+        success, treatments_data, message = await self.get_monthly_treatments_with_tutors()
         
         if not success:
             self.logger.error(f"Erro ao buscar tratamentos: {message}")
@@ -416,7 +336,10 @@ class MonthlyReportService:
                 self.logger.error(error_msg)
         
         # Retorna resumo da execução
-        final_message = f"Processamento concluído: {emails_sent} relatórios consolidados enviados para {total_tutors} tutores ({total_pets} pets, {total_current} agendados, {total_expired} expirados)"
+        final_message = (
+            f"Processamento concluído: {emails_sent} relatórios consolidados enviados para "
+            f"{total_tutors} tutores ({total_pets} pets, {total_current} agendados, {total_expired} expirados)"
+        )
         if errors:
             final_message += f", {len(errors)} erros encontrados"
         

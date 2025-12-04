@@ -1,15 +1,19 @@
+"""
+Serviço para envio de notificações de tratamentos
+"""
+
 import smtplib
 import logging
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.pet_repository import PetRepository
-from ..repositories.user_repository import UserRepository
-from ..config import (
+from app.repositories import PetRepository, UserRepository
+from app.config import (
     GMAIL_EMAIL, 
     GMAIL_PASSWORD, 
     GMAIL_SMTP_SERVER, 
@@ -21,9 +25,10 @@ from ..config import (
 class NotificationService:
     """Serviço para envio de notificações de tratamentos"""
     
-    def __init__(self):
-        self.pet_repo = PetRepository()
-        self.user_repo = UserRepository()
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.pet_repo = PetRepository(session)
+        self.user_repo = UserRepository(session)
         self.logger = logging.getLogger(__name__)
         
         # Configura Jinja2 para templates
@@ -31,14 +36,14 @@ class NotificationService:
         template_dir.mkdir(exist_ok=True)
         self.jinja_env = Environment(loader=FileSystemLoader(template_dir))
     
-    def get_tomorrow_treatments_with_tutors(self) -> Tuple[bool, List[Dict[str, Any]], str]:
+    async def get_tomorrow_treatments_with_tutors(self) -> Tuple[bool, List[Dict[str, Any]], str]:
         """
         Busca tratamentos de amanhã com dados dos tutores
         Retorna: (sucesso, lista_tratamentos_com_tutores, mensagem)
         """
         try:
             # Busca tratamentos de amanhã
-            treatments_data = self.pet_repo.get_tomorrow_scheduled_treatments()
+            treatments_data = await self.pet_repo.get_tomorrow_scheduled_treatments()
             
             if not treatments_data:
                 return True, [], "Nenhum tratamento agendado para amanhã."
@@ -48,7 +53,7 @@ class NotificationService:
             
             for pet_data in treatments_data:
                 # Busca emails dos tutores
-                tutors = self.user_repo.get_user_emails_by_ids(pet_data["users"])
+                tutors = await self.user_repo.get_user_emails_by_ids(pet_data["users"])
                 
                 # Só adiciona se houver tutores com email
                 if tutors:
@@ -96,7 +101,13 @@ class NotificationService:
             "total_treatments": len(formatted_treatments)
         }
     
-    def send_email_notification(self, tutor_email: str, tutor_name: str, email_data: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, str]:
+    def send_email_notification(
+        self,
+        tutor_email: str,
+        tutor_name: str,
+        email_data: Dict[str, Any],
+        dry_run: bool = False
+    ) -> Tuple[bool, str]:
         """
         Envia email de notificação para um tutor
         """
@@ -143,14 +154,14 @@ class NotificationService:
             self.logger.error(f"Erro ao enviar email para {tutor_email}: {e}")
             return False, f"Erro ao enviar email para {tutor_email}: {str(e)}"
     
-    def process_daily_notifications(self, dry_run: bool = False) -> Dict[str, Any]:
+    async def process_daily_notifications(self, dry_run: bool = False) -> Dict[str, Any]:
         """
         Processa todas as notificações diárias de tratamentos
         """
         self.logger.info("Iniciando processamento de notificações diárias")
         
         # Busca tratamentos de amanhã
-        success, treatments_data, message = self.get_tomorrow_treatments_with_tutors()
+        success, treatments_data, message = await self.get_tomorrow_treatments_with_tutors()
         
         if not success:
             self.logger.error(f"Erro ao buscar tratamentos: {message}")

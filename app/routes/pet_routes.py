@@ -1,11 +1,17 @@
+"""
+Rotas de pets
+"""
+
 import requests
 from datetime import datetime
 from typing import Optional, Literal
 from fastapi import APIRouter, HTTPException, Request, Depends, Form, Query, UploadFile, File, status
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse, JSONResponse
-from ..services import PetService, FileService, UserService
-from ..models import PetType
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import PetService, FileService, UserService
+from app.schemas import PetType
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
 
 # Configuração do Jinja2
@@ -48,9 +54,10 @@ def get_cat_breeds_list():
 
 
 @router.get("/pets/form")
-def pet_form_page(
+async def pet_form_page(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     error: str = Query(None),
     pet_id: str = Query(None),
 ):
@@ -63,10 +70,10 @@ def pet_form_page(
     # Busca pet para edição se pet_id for fornecido
     pet = None
     if pet_id:
-        pet_service = PetService()
-        pet = pet_service.get_pet_details(pet_id, user["id"])
+        pet_service = PetService(db)
+        pet = await pet_service.get_pet_details(pet_id, user["id"])
 
-    from ..services.file_service import ALLOWED_EXTENSIONS
+    from app.services.file_service import ALLOWED_EXTENSIONS
     
     return templates.TemplateResponse(
         "pet_form.html",
@@ -82,16 +89,17 @@ def pet_form_page(
 
 
 @router.get("/pets/{pet_id}/edit")
-def edit_pet_page(
+async def edit_pet_page(
     pet_id: str,
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Renderiza a página com o formulário pré-preenchido para editar um pet.
     """
-    pet_service = PetService()
-    pet = pet_service.get_pet_details(pet_id, user["id"])
+    pet_service = PetService(db)
+    pet = await pet_service.get_pet_details(pet_id, user["id"])
     
     if not pet:
         raise HTTPException(
@@ -114,17 +122,18 @@ def edit_pet_page(
 
 
 @router.get("/pets/{pet_id}/profile")
-def pet_profile_page(
+async def pet_profile_page(
     pet_id: str,
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     search: Optional[str] = None,
 ):
     """
     Renderiza a página de perfil do pet, com detalhes e tratamentos.
     """
-    pet_service = PetService()
-    pet = pet_service.get_pet_details(pet_id, user["id"])
+    pet_service = PetService(db)
+    pet = await pet_service.get_pet_details(pet_id, user["id"])
 
     if not pet:
         raise HTTPException(status_code=404, detail="Pet não encontrado.")
@@ -253,6 +262,7 @@ def pet_profile_page(
 @router.post("/pets")
 async def create_or_update_pet_from_form(
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     pet_id: str | None = Form(None),
     name: str = Form(...),
     breed: str = Form(...),
@@ -265,7 +275,7 @@ async def create_or_update_pet_from_form(
     """
     Cria ou atualiza um pet a partir do formulário HTML.
     """
-    pet_service = PetService()
+    pet_service = PetService(db)
     file_service = FileService()
 
     # Processa imagem se fornecida
@@ -281,7 +291,7 @@ async def create_or_update_pet_from_form(
 
         # Se for atualização, remove imagem antiga (implementar se necessário)
         if pet_id:
-            old_pet = pet_service.get_pet_details(pet_id, user["id"])
+            old_pet = await pet_service.get_pet_details(pet_id, user["id"])
             if old_pet and "photo" in old_pet:
                 file_service.delete_pet_images(pet_id)
 
@@ -302,7 +312,7 @@ async def create_or_update_pet_from_form(
 
     if pet_id:
         # Lógica de atualização
-        success, message = pet_service.update_pet(pet_id, pet_data, user["id"])
+        success, message = await pet_service.update_pet(pet_id, pet_data, user["id"])
         
         if not success:
             raise HTTPException(
@@ -314,10 +324,10 @@ async def create_or_update_pet_from_form(
         if photo_data:
             final_photo_data = file_service.move_temp_image_to_pet_folder(photo_data, pet_id)
             if final_photo_data:
-                pet_service.update_pet(pet_id, {"photo": final_photo_data}, user["id"])
+                await pet_service.update_pet(pet_id, {"photo": final_photo_data}, user["id"])
     else:
         # Lógica de criação
-        success, message, new_pet_id = pet_service.create_pet(pet_data, user["id"])
+        success, message, new_pet_id = await pet_service.create_pet(pet_data, user["id"])
         
         if not success:
             raise HTTPException(
@@ -329,23 +339,25 @@ async def create_or_update_pet_from_form(
         if photo_data and new_pet_id:
             final_photo_data = file_service.move_temp_image_to_pet_folder(photo_data, new_pet_id)
             if final_photo_data:
-                pet_service.update_pet(new_pet_id, {"photo": final_photo_data}, user["id"])
+                await pet_service.update_pet(new_pet_id, {"photo": final_photo_data}, user["id"])
 
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/pets/{pet_id}/delete")
-def delete_pet_from_form(
-    pet_id: str, user: dict = Depends(get_current_user_from_session)
+async def delete_pet_from_form(
+    pet_id: str,
+    user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Realiza o soft delete de um pet.
     """
-    pet_service = PetService()
+    pet_service = PetService(db)
     file_service = FileService()
 
     # Busca o pet para verificar se tem fotos
-    pet = pet_service.get_pet_details(pet_id, user["id"])
+    pet = await pet_service.get_pet_details(pet_id, user["id"])
 
     if not pet:
         raise HTTPException(
@@ -357,7 +369,7 @@ def delete_pet_from_form(
     if pet.get("photo"):
         file_service.delete_pet_images(pet_id)
 
-    success, message = pet_service.delete_pet(pet_id, user["id"])
+    success, message = await pet_service.delete_pet(pet_id, user["id"])
     
     if not success:
         raise HTTPException(
@@ -369,74 +381,81 @@ def delete_pet_from_form(
 
 
 @router.get("/generate-pet-name")
-def generate_pet_name(gender: str = Query(...)):
+async def generate_pet_name(
+    gender: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Gera uma lista de nomes de pet ou comidas baseada no gênero.
     """
-    pet_service = PetService()
+    pet_service = PetService(db)
     return pet_service.generate_pet_names(gender)
 
 
 # Rotas para gerenciamento de acesso de veterinários
 @router.get("/api/search-veterinarians")
-def search_veterinarians(
+async def search_veterinarians(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     search: str = Query(..., min_length=2),
 ):
     """
     Busca veterinários por nome para vinculação a pets.
     Apenas tutores podem buscar veterinários.
     """
-    user_service = UserService()
-    veterinarians = user_service.search_veterinarians(search, user["id"])
+    user_service = UserService(db)
+    veterinarians = await user_service.search_veterinarians(search, user["id"])
     return JSONResponse(content={"veterinarians": veterinarians})
 
 
 @router.post("/pets/{pet_id}/grant-access")
-def grant_veterinarian_access(
+async def grant_veterinarian_access(
     pet_id: str,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     veterinarian_id: str = Form(...),
 ):
     """
     Concede acesso de um veterinário a um pet específico.
     Apenas o tutor do pet pode conceder acesso.
     """
-    pet_service = PetService()
-    success, message = pet_service.grant_veterinarian_access(pet_id, veterinarian_id, user["id"])
+    pet_service = PetService(db)
+    success, message = await pet_service.grant_veterinarian_access(pet_id, veterinarian_id, user["id"])
 
     return JSONResponse(content={"success": success, "message": message})
 
 
 @router.post("/pets/{pet_id}/revoke-access")
-def revoke_veterinarian_access(
+async def revoke_veterinarian_access(
     pet_id: str,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     veterinarian_id: str = Form(...),
 ):
     """
     Remove o acesso de um veterinário a um pet específico.
     Apenas o tutor do pet pode remover acesso.
     """
-    pet_service = PetService()
-    success, message = pet_service.revoke_veterinarian_access(pet_id, veterinarian_id, user["id"])
+    pet_service = PetService(db)
+    success, message = await pet_service.revoke_veterinarian_access(pet_id, veterinarian_id, user["id"])
 
     return JSONResponse(content={"success": success, "message": message})
 
 
 @router.get("/pets/{pet_id}/veterinarians")
-def get_pet_veterinarians(
+async def get_pet_veterinarians(
     pet_id: str,
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Lista os veterinários que têm acesso ao pet.
     Apenas o tutor do pet pode ver esta lista.
     """
-    pet_service = PetService()
-    success, veterinarians, message = pet_service.get_pet_veterinarians(pet_id, user["id"])
+    pet_service = PetService(db)
+    success, veterinarians, message = await pet_service.get_pet_veterinarians(pet_id, user["id"])
 
     if not success:
         raise HTTPException(status_code=404, detail=message)

@@ -1,11 +1,15 @@
+"""
+Rotas do dashboard
+"""
+
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
 from datetime import datetime
-from ..services import PetService
-from ..repositories import UserRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import PetService, UserService
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
-from ..models import UserProfile
 
 # Configuração do Jinja2
 templates = Jinja2Templates(directory="templates")
@@ -28,8 +32,10 @@ def get_landing_page(request: Request):
 
 
 @router.get("/dashboard", name="dashboard")
-def get_dashboard_page(
-    request: Request, user: dict = Depends(get_current_user_from_session)
+async def get_dashboard_page(
+    request: Request,
+    user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Renderiza a página do dashboard para usuários autenticados,
@@ -38,18 +44,19 @@ def get_dashboard_page(
     try:
         is_authenticated = "access_token" in request.session
         
-        pet_service = PetService()
-        pets_list = pet_service.get_user_pets(user["id"])
+        pet_service = PetService(db)
+        user_service = UserService(db)
         
-        user_repository = UserRepository()
+        pets_list = await pet_service.get_user_pets(user["id"])
+        
         user_email = user["info"].get("email")
         user_nickname = user["info"].get("nickname")
         user_profile = None
         
         if user_email:
-            user_profile = user_repository.get_profile_by_email(user_email)
+            user_profile = await user_service.user_repo.get_profile_by_email(user_email)
             if not user_profile:
-                user_profile = user_repository.get_profile_by_id(user["id"])
+                user_profile = await user_service.user_repo.get_profile_by_id(user["id"])
         
         if not user_profile:
             request.session["profile_message"] = "complete_profile"
@@ -74,5 +81,5 @@ def get_dashboard_page(
                 "pets": pets_list,
             },
         )
-    except HTTPException as e:
+    except HTTPException:
         raise

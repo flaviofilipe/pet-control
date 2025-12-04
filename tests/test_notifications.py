@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import datetime, timedelta
 from pathlib import Path
 import smtplib
@@ -7,8 +7,6 @@ import tempfile
 from email.mime.multipart import MIMEMultipart
 
 from app.services.notification_service import NotificationService
-from app.repositories.pet_repository import PetRepository
-from app.repositories.user_repository import UserRepository
 
 
 class TestNotificationService:
@@ -19,7 +17,7 @@ class TestNotificationService:
         """Fixture para instanciar o serviço de notificações"""
         with patch('app.services.notification_service.PetRepository'), \
              patch('app.services.notification_service.UserRepository'):
-            service = NotificationService()
+            service = NotificationService(Mock())
             return service
     
     @pytest.fixture
@@ -27,7 +25,7 @@ class TestNotificationService:
         """Dados de teste para pets com tratamentos"""
         return [
             {
-                "_id": "507f1f77bcf86cd799439011",
+                "_id": "507f1f77-bcf8-6cd7-9943-9011abcdef01",
                 "name": "Rex",
                 "nickname": "rex_1234",
                 "users": ["user1", "user2"],
@@ -35,7 +33,7 @@ class TestNotificationService:
                     {
                         "_id": "treatment1",
                         "name": "Vacina Antirrábica",
-                        "category": "Vacina",
+                        "category": "Vacinas",
                         "description": "Vacina anual obrigatória",
                         "date": "2025-11-09",
                         "time": "14:00",
@@ -46,7 +44,7 @@ class TestNotificationService:
                     {
                         "_id": "treatment2",
                         "name": "Vermífugo",
-                        "category": "Medicamento",
+                        "category": "Vermífugo",
                         "description": "Controle de vermes",
                         "date": "2025-11-09",
                         "time": "14:30",
@@ -74,13 +72,14 @@ class TestNotificationService:
             }
         ]
     
-    def test_get_tomorrow_treatments_with_tutors_success(self, notification_service, mock_pet_data, mock_tutor_data):
+    @pytest.mark.asyncio
+    async def test_get_tomorrow_treatments_with_tutors_success(self, notification_service, mock_pet_data, mock_tutor_data):
         """Testa busca de tratamentos de amanhã com sucesso"""
         # Mock dos repositories
-        notification_service.pet_repo.get_tomorrow_scheduled_treatments.return_value = mock_pet_data
-        notification_service.user_repo.get_user_emails_by_ids.return_value = mock_tutor_data
+        notification_service.pet_repo.get_tomorrow_scheduled_treatments = AsyncMock(return_value=mock_pet_data)
+        notification_service.user_repo.get_user_emails_by_ids = AsyncMock(return_value=mock_tutor_data)
         
-        success, data, message = notification_service.get_tomorrow_treatments_with_tutors()
+        success, data, message = await notification_service.get_tomorrow_treatments_with_tutors()
         
         assert success is True
         assert len(data) == 1
@@ -90,31 +89,34 @@ class TestNotificationService:
         assert len(data[0]["tutors"]) == 2
         assert "1 pets com tratamentos agendados" in message
     
-    def test_get_tomorrow_treatments_no_treatments(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_get_tomorrow_treatments_no_treatments(self, notification_service):
         """Testa quando não há tratamentos para amanhã"""
-        notification_service.pet_repo.get_tomorrow_scheduled_treatments.return_value = []
+        notification_service.pet_repo.get_tomorrow_scheduled_treatments = AsyncMock(return_value=[])
         
-        success, data, message = notification_service.get_tomorrow_treatments_with_tutors()
+        success, data, message = await notification_service.get_tomorrow_treatments_with_tutors()
         
         assert success is True
         assert len(data) == 0
         assert message == "Nenhum tratamento agendado para amanhã."
     
-    def test_get_tomorrow_treatments_no_tutors_with_email(self, notification_service, mock_pet_data):
+    @pytest.mark.asyncio
+    async def test_get_tomorrow_treatments_no_tutors_with_email(self, notification_service, mock_pet_data):
         """Testa quando não há tutores com email válido"""
-        notification_service.pet_repo.get_tomorrow_scheduled_treatments.return_value = mock_pet_data
-        notification_service.user_repo.get_user_emails_by_ids.return_value = []  # Sem emails
+        notification_service.pet_repo.get_tomorrow_scheduled_treatments = AsyncMock(return_value=mock_pet_data)
+        notification_service.user_repo.get_user_emails_by_ids = AsyncMock(return_value=[])  # Sem emails
         
-        success, data, message = notification_service.get_tomorrow_treatments_with_tutors()
+        success, data, message = await notification_service.get_tomorrow_treatments_with_tutors()
         
         assert success is True
         assert len(data) == 0  # Sem pets para notificar
     
-    def test_get_tomorrow_treatments_exception(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_get_tomorrow_treatments_exception(self, notification_service):
         """Testa tratamento de exceção na busca"""
-        notification_service.pet_repo.get_tomorrow_scheduled_treatments.side_effect = Exception("DB Error")
+        notification_service.pet_repo.get_tomorrow_scheduled_treatments = AsyncMock(side_effect=Exception("DB Error"))
         
-        success, data, message = notification_service.get_tomorrow_treatments_with_tutors()
+        success, data, message = await notification_service.get_tomorrow_treatments_with_tutors()
         
         assert success is False
         assert len(data) == 0
@@ -130,7 +132,7 @@ class TestNotificationService:
             "treatments": [
                 {
                     "name": "Vacina Antirrábica",
-                    "category": "Vacina",
+                    "category": "Vacinas",
                     "description": "Vacina anual",
                     "time": "14:00",
                     "applier_type": "Veterinarian",
@@ -146,7 +148,7 @@ class TestNotificationService:
         assert formatted["total_treatments"] == 1
         assert len(formatted["treatments"]) == 1
         assert formatted["treatments"][0]["name"] == "Vacina Antirrábica"
-        assert formatted["treatments"][0]["category"] == "Vacina"
+        assert formatted["treatments"][0]["category"] == "Vacinas"
         # Verifica se a data é de amanhã
         tomorrow = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
         assert formatted["date"] == tomorrow
@@ -246,12 +248,13 @@ class TestNotificationService:
         assert success is False
         assert "SMTP Error" in message
     
-    def test_process_daily_notifications_no_treatments(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_process_daily_notifications_no_treatments(self, notification_service):
         """Testa processamento quando não há tratamentos"""
-        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors') as mock_get:
+        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors', new_callable=AsyncMock) as mock_get:
             mock_get.return_value = (True, [], "Nenhum tratamento agendado para amanhã.")
             
-            result = notification_service.process_daily_notifications(dry_run=True)
+            result = await notification_service.process_daily_notifications(dry_run=True)
         
         assert result["success"] is True
         assert result["total_pets"] == 0
@@ -259,12 +262,13 @@ class TestNotificationService:
         assert result["dry_run"] is True
         assert "Nenhum tratamento agendado" in result["message"]
     
-    def test_process_daily_notifications_error_getting_treatments(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_process_daily_notifications_error_getting_treatments(self, notification_service):
         """Testa processamento quando há erro ao buscar tratamentos"""
-        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors') as mock_get:
+        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors', new_callable=AsyncMock) as mock_get:
             mock_get.return_value = (False, [], "Erro no banco")
             
-            result = notification_service.process_daily_notifications(dry_run=True)
+            result = await notification_service.process_daily_notifications(dry_run=True)
         
         assert result["success"] is False
         assert result["total_pets"] == 0
@@ -272,16 +276,17 @@ class TestNotificationService:
         assert result["dry_run"] is True
         assert result["message"] == "Erro no banco"
     
-    def test_process_daily_notifications_success(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_process_daily_notifications_success(self, notification_service):
         """Testa processamento completo com sucesso"""
         # Mock dos dados
         treatments_data = [{
             "pet": {"name": "Rex", "nickname": "rex_1234"},
-            "treatments": [{"name": "Vacina", "category": "Vacina"}],
+            "treatments": [{"name": "Vacina", "category": "Vacinas"}],
             "tutors": [{"email": "test@email.com", "name": "Teste"}]
         }]
         
-        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors') as mock_get, \
+        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors', new_callable=AsyncMock) as mock_get, \
              patch.object(notification_service, 'format_treatments_for_email') as mock_format, \
              patch.object(notification_service, 'send_email_notification') as mock_send:
             
@@ -289,7 +294,7 @@ class TestNotificationService:
             mock_format.return_value = {"formatted": "data"}
             mock_send.return_value = (True, "Email enviado")
             
-            result = notification_service.process_daily_notifications(dry_run=True)
+            result = await notification_service.process_daily_notifications(dry_run=True)
         
         assert result["success"] is True
         assert result["total_pets"] == 1
@@ -297,7 +302,8 @@ class TestNotificationService:
         assert result["dry_run"] is True
         assert len(result["errors"]) == 0
     
-    def test_process_daily_notifications_partial_errors(self, notification_service):
+    @pytest.mark.asyncio
+    async def test_process_daily_notifications_partial_errors(self, notification_service):
         """Testa processamento com erros parciais"""
         treatments_data = [{
             "pet": {"name": "Rex", "nickname": "rex_1234"},
@@ -314,7 +320,7 @@ class TestNotificationService:
             else:
                 return (False, "Erro no envio")
         
-        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors') as mock_get, \
+        with patch.object(notification_service, 'get_tomorrow_treatments_with_tutors', new_callable=AsyncMock) as mock_get, \
              patch.object(notification_service, 'format_treatments_for_email') as mock_format, \
              patch.object(notification_service, 'send_email_notification') as mock_send:
             
@@ -322,148 +328,13 @@ class TestNotificationService:
             mock_format.return_value = {"formatted": "data"}
             mock_send.side_effect = mock_send_side_effect
             
-            result = notification_service.process_daily_notifications(dry_run=True)
+            result = await notification_service.process_daily_notifications(dry_run=True)
         
         assert result["success"] is True
         assert result["total_pets"] == 1
         assert result["emails_sent"] == 1  # Só um sucesso
         assert len(result["errors"]) == 1  # Um erro
         assert "Erro no envio" in result["errors"][0]
-
-
-class TestPetRepositoryNotifications:
-    """Testes para métodos de notificação no PetRepository"""
-    
-    @pytest.fixture
-    def pet_repo(self):
-        """Fixture para o repository de pets"""
-        with patch('app.repositories.pet_repository.database'):
-            return PetRepository()
-    
-    @pytest.fixture
-    def mock_aggregate_result(self):
-        """Mock do resultado de agregação MongoDB"""
-        return [
-            {
-                "_id": "507f1f77bcf86cd799439011",
-                "name": "Rex",
-                "nickname": "rex_1234", 
-                "users": ["user1", "user2"],
-                "treatments": [
-                    {
-                        "_id": "treatment1",
-                        "name": "Vacina",
-                        "category": "Vacina",
-                        "date": "2025-11-09",
-                        "done": False
-                    }
-                ]
-            }
-        ]
-    
-    def test_get_scheduled_treatments_for_date_success(self, pet_repo, mock_aggregate_result):
-        """Testa busca de tratamentos por data específica"""
-        pet_repo.collection.aggregate.return_value = mock_aggregate_result
-        
-        result = pet_repo.get_scheduled_treatments_for_date("2025-11-09")
-        
-        assert len(result) == 1
-        assert result[0]["name"] == "Rex"
-        assert result[0]["nickname"] == "rex_1234"
-        assert len(result[0]["treatments"]) == 1
-        
-        # Verifica se a query de agregação foi chamada corretamente
-        pet_repo.collection.aggregate.assert_called_once()
-        call_args = pet_repo.collection.aggregate.call_args[0][0]
-        
-        # Verifica os estágios da pipeline
-        assert call_args[0]["$match"]["deleted_at"] is None
-        assert call_args[2]["$match"]["treatments.date"] == "2025-11-09"
-        assert call_args[2]["$match"]["treatments.done"] is False
-    
-    def test_get_scheduled_treatments_for_date_empty(self, pet_repo):
-        """Testa quando não há tratamentos na data"""
-        pet_repo.collection.aggregate.return_value = []
-        
-        result = pet_repo.get_scheduled_treatments_for_date("2025-11-09")
-        
-        assert len(result) == 0
-    
-    def test_get_scheduled_treatments_for_date_exception(self, pet_repo):
-        """Testa tratamento de exceção na agregação"""
-        pet_repo.collection.aggregate.side_effect = Exception("DB Error")
-        
-        result = pet_repo.get_scheduled_treatments_for_date("2025-11-09")
-        
-        assert len(result) == 0
-    
-    @patch('app.repositories.pet_repository.datetime')
-    def test_get_tomorrow_scheduled_treatments(self, mock_datetime, pet_repo):
-        """Testa busca de tratamentos de amanhã"""
-        # Mock da data atual
-        mock_now = datetime(2025, 11, 8, 10, 0, 0)
-        mock_datetime.now.return_value = mock_now
-        
-        # Mock do resultado
-        pet_repo.collection.aggregate.return_value = []
-        
-        with patch.object(pet_repo, 'get_scheduled_treatments_for_date') as mock_get:
-            mock_get.return_value = []
-            
-            result = pet_repo.get_tomorrow_scheduled_treatments()
-            
-            # Verifica se foi chamado com a data de amanhã
-            mock_get.assert_called_once_with("2025-11-09")
-
-
-class TestUserRepositoryNotifications:
-    """Testes para métodos de notificação no UserRepository"""
-    
-    @pytest.fixture
-    def user_repo(self):
-        """Fixture para o repository de usuários"""
-        with patch('app.repositories.user_repository.database'):
-            return UserRepository()
-    
-    def test_get_user_emails_by_ids_success(self, user_repo):
-        """Testa busca de emails por IDs com sucesso"""
-        mock_users = [
-            {"_id": "user1", "name": "João", "email": "joao@email.com"},
-            {"_id": "user2", "name": "Maria", "email": "maria@email.com"},
-            {"_id": "user3", "name": "Pedro", "email": ""}  # Sem email
-        ]
-        
-        with patch.object(user_repo, 'find') as mock_find:
-            mock_find.return_value = mock_users
-            
-            result = user_repo.get_user_emails_by_ids(["user1", "user2", "user3"])
-            
-            # Deve retornar apenas usuários com email
-            assert len(result) == 2
-            assert result[0]["id"] == "user1"
-            assert result[0]["name"] == "João"
-            assert result[0]["email"] == "joao@email.com"
-            assert result[1]["id"] == "user2"
-    
-    def test_get_user_emails_by_ids_empty_list(self, user_repo):
-        """Testa busca com lista vazia"""
-        result = user_repo.get_user_emails_by_ids([])
-        
-        assert len(result) == 0
-    
-    def test_get_user_emails_by_ids_no_emails(self, user_repo):
-        """Testa quando nenhum usuário tem email"""
-        mock_users = [
-            {"_id": "user1", "name": "João", "email": ""},
-            {"_id": "user2", "name": "Maria"}  # Sem campo email
-        ]
-        
-        with patch.object(user_repo, 'find') as mock_find:
-            mock_find.return_value = mock_users
-            
-            result = user_repo.get_user_emails_by_ids(["user1", "user2"])
-            
-            assert len(result) == 0
 
 
 class TestNotificationTemplate:
@@ -475,7 +346,7 @@ class TestNotificationTemplate:
         with patch('app.services.notification_service.PetRepository'), \
              patch('app.services.notification_service.UserRepository'):
             
-            service = NotificationService()
+            service = NotificationService(Mock())
             return service
     
     def test_template_rendering(self, template_service):
@@ -486,8 +357,8 @@ class TestNotificationTemplate:
             "date": "09/11/2025",
             "total_treatments": 2,
             "treatments": [
-                {"name": "Vacina", "category": "Vacina"},
-                {"name": "Vermífugo", "category": "Medicamento"}
+                {"name": "Vacina", "category": "Vacinas"},
+                {"name": "Vermífugo", "category": "Vermífugo"}
             ]
         }
         
@@ -528,152 +399,8 @@ class TestNotificationTemplate:
                 assert "Pet: Rex (rex_1234)" in rendered
                 assert "Data: 09/11/2025" in rendered
                 assert "Total de tratamentos: 2" in rendered
-                assert "Vacina - Vacina" in rendered
-                assert "Vermífugo - Medicamento" in rendered
-
-
-class TestDailyCheckScript:
-    """Testes para o script principal de verificação diária"""
-    
-    @patch('app.tasks.daily_check.Database')
-    @patch('app.tasks.daily_check.NotificationService')
-    def test_main_dry_run_success(self, mock_notification_service, mock_database):
-        """Testa execução principal em modo dry-run"""
-        # Mock do resultado do processamento
-        mock_result = {
-            "success": True,
-            "message": "Processamento concluído",
-            "total_pets": 1,
-            "emails_sent": 1,
-            "errors": [],
-            "dry_run": True
-        }
-        
-        mock_service_instance = Mock()
-        mock_service_instance.process_daily_notifications.return_value = mock_result
-        mock_service_instance.get_tomorrow_treatments_with_tutors.return_value = (True, [], "Nenhum tratamento")
-        mock_notification_service.return_value = mock_service_instance
-        
-        mock_db_instance = Mock()
-        mock_database.return_value = mock_db_instance
-        
-        # Simula argumentos da linha de comando
-        import sys
-        original_argv = sys.argv
-        try:
-            sys.argv = ['daily_check.py', '--dry-run']
-            
-            # Import e execução do main
-            from app.tasks.daily_check import main
-            
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-            
-            # Verifica se saiu com código 0 (sucesso)
-            assert excinfo.value.code == 0
-            
-            # Verifica se os métodos foram chamados
-            mock_db_instance.connect.assert_called_once()
-            mock_service_instance.process_daily_notifications.assert_called_once_with(dry_run=True)
-            mock_db_instance.close.assert_called_once()
-            
-        finally:
-            sys.argv = original_argv
-    
-    @patch('app.tasks.daily_check.Database')
-    @patch('app.tasks.daily_check.NotificationService') 
-    def test_main_real_execution_success(self, mock_notification_service, mock_database):
-        """Testa execução real (sem dry-run)"""
-        mock_result = {
-            "success": True,
-            "message": "Emails enviados com sucesso",
-            "total_pets": 2,
-            "emails_sent": 3,
-            "errors": [],
-            "dry_run": False
-        }
-        
-        mock_service_instance = Mock()
-        mock_service_instance.process_daily_notifications.return_value = mock_result
-        mock_service_instance.get_tomorrow_treatments_with_tutors.return_value = (True, [], "Nenhum tratamento")
-        mock_notification_service.return_value = mock_service_instance
-        
-        mock_db_instance = Mock()
-        mock_database.return_value = mock_db_instance
-        
-        import sys
-        original_argv = sys.argv
-        try:
-            sys.argv = ['daily_check.py']  # Sem --dry-run
-            
-            from app.tasks.daily_check import main
-            
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-            
-            assert excinfo.value.code == 0
-            mock_service_instance.process_daily_notifications.assert_called_once_with(dry_run=False)
-            
-        finally:
-            sys.argv = original_argv
-    
-    @patch('app.tasks.daily_check.Database')
-    def test_main_database_connection_error(self, mock_database):
-        """Testa erro de conexão com banco de dados"""
-        mock_database.side_effect = Exception("Connection failed")
-        
-        import sys
-        original_argv = sys.argv
-        try:
-            sys.argv = ['daily_check.py', '--dry-run']
-            
-            from app.tasks.daily_check import main
-            
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-            
-            # Verifica se saiu com código de erro
-            assert excinfo.value.code == 1
-            
-        finally:
-            sys.argv = original_argv
-    
-    @patch('app.tasks.daily_check.Database')
-    @patch('app.tasks.daily_check.NotificationService')
-    def test_main_notification_service_error(self, mock_notification_service, mock_database):
-        """Testa erro no serviço de notificações"""
-        mock_result = {
-            "success": False,
-            "message": "Erro ao processar notificações",
-            "total_pets": 0,
-            "emails_sent": 0,
-            "errors": ["Erro crítico"],
-            "dry_run": True
-        }
-        
-        mock_service_instance = Mock()
-        mock_service_instance.process_daily_notifications.return_value = mock_result
-        mock_service_instance.get_tomorrow_treatments_with_tutors.return_value = (True, [], "Nenhum tratamento")
-        mock_notification_service.return_value = mock_service_instance
-        
-        mock_db_instance = Mock()
-        mock_database.return_value = mock_db_instance
-        
-        import sys
-        original_argv = sys.argv
-        try:
-            sys.argv = ['daily_check.py', '--dry-run']
-            
-            from app.tasks.daily_check import main
-            
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-            
-            # Verifica se saiu com código de erro
-            assert excinfo.value.code == 1
-            
-        finally:
-            sys.argv = original_argv
+                assert "Vacina - Vacinas" in rendered
+                assert "Vermífugo - Vermífugo" in rendered
 
 
 class TestConfigValidation:

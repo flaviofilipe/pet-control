@@ -3,60 +3,75 @@
 import os
 import sys
 import pytest
+import asyncio
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-from mongomock import MongoClient as MockMongoClient
 from PIL import Image
 import io
-import json
 
 # Define variáveis de ambiente para teste antes de importar main
 os.environ.update({
-    "ENVIRONMENT": "testing",  # Define ambiente de testes
+    "ENVIRONMENT": "testing",
+    "DATABASE_URL": "sqlite+aiosqlite:///:memory:",  # SQLite em memória para testes
     "AUTH0_DOMAIN": "test-domain.auth0.com",
     "AUTH0_API_AUDIENCE": "test-audience",
     "AUTH0_CLIENT_ID": "test-client-id",
     "AUTH0_CLIENT_SECRET": "test-client-secret",
     "AUTH0_CALLBACK_URI": "http://localhost:8000/callback",
-    "MONGO_URI": "mongodb://test:27017/",
     "SESSION_SECRET_KEY": "test-secret-key-for-testing",
+    "FRONTEND_URL": "http://localhost:8000",
 })
 
-# Patch do MongoDB antes de importar main
-mock_mongo_client = MockMongoClient()
-
 # Cria diretórios necessários para o app
-from pathlib import Path
 Path("templates").mkdir(exist_ok=True)
 Path("static").mkdir(exist_ok=True)
 Path("uploads").mkdir(exist_ok=True)
 
-# Patch global que persiste durante toda a sessão de teste  
-_mongo_patch = patch("pymongo.MongoClient", return_value=mock_mongo_client)
-_mongo_patch.start()
 
-# Força limpeza de qualquer importação prévia do main
-import sys
-if 'main' in sys.modules:
-    del sys.modules['main']
-
-@pytest.fixture(scope="session", autouse=True) 
-def patch_mongo():
-    """Patch global do MongoDB para usar MockMongoDB."""
-    yield mock_mongo_client
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create event loop for async tests"""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture(scope="function")
-def clean_db():
-    """Limpa o banco de dados antes de cada teste."""
-    # Limpa todas as collections
-    mock_mongo_client.drop_database("pet_control")
-    yield
-    # Limpa novamente após o teste
-    mock_mongo_client.drop_database("pet_control")
+async def db_session():
+    """Create fresh database for each test"""
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from app.database.base import Base
+    
+    # Engine de teste com SQLite
+    test_engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        echo=False,
+    )
+    
+    # Session factory de teste
+    TestSessionLocal = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    
+    # Criar todas as tabelas
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # Criar sessão
+    async with TestSessionLocal() as session:
+        yield session
+        await session.rollback()
+    
+    # Limpar após o teste
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    
+    await test_engine.dispose()
 
 
 @pytest.fixture
@@ -226,9 +241,12 @@ def test_image():
 
 
 @pytest.fixture
-def client(clean_db, temp_upload_dir, patch_mongo):
+def client(temp_upload_dir):
     """Cliente de teste para a aplicação FastAPI."""
-    # Importa main depois do patch do mongo
+    # Patch do database para usar SQLite em memória
+    from unittest.mock import AsyncMock
+    
+    # Importa main depois de configurar o ambiente
     from main import app
     
     with TestClient(app) as test_client:
@@ -293,101 +311,6 @@ def vet_client(client, veterinarian_user):
             app.dependency_overrides[get_current_user_from_session] = original_override
         else:
             app.dependency_overrides.pop(get_current_user_from_session, None)
-
-
-# Fixtures para dados do banco
-@pytest.fixture
-def db_collections():
-    """Retorna as collections do banco de dados mockado."""
-    from app.database import database
-    return {
-        "profiles": database.profiles_collection,
-        "pets": database.pets_collection,
-        "vaccines": database.vaccines_collection,
-        "ectoparasites": database.ectoparasites_collection,
-        "vermifugos": database.vermifugos_collection,
-    }
-
-
-@pytest.fixture
-def populated_vaccines(db_collections):
-    """Popula a collection de vacinas com dados de teste."""
-    vaccines_data = [
-        {
-            "nome_vacina": "V8",
-            "descricao": "Vacina óctupla para cães",
-            "especie_alvo": "Cão",
-            "tipo_vacina": "Múltipla",
-            "protege_contra": ["Cinomose", "Hepatite", "Parainfluenza"],
-            "cronograma_vacinal": {
-                "filhote": "Primeira dose aos 45 dias, segunda aos 75 dias",
-                "adulto": "Anual"
-            }
-        },
-        {
-            "nome_vacina": "Antirrábica",
-            "descricao": "Vacina contra raiva",
-            "especie_alvo": "Cão",
-            "tipo_vacina": "Única",
-            "protege_contra": ["Raiva"],
-            "cronograma_vacinal": {
-                "filhote": "A partir dos 4 meses",
-                "adulto": "Anual"
-            }
-        },
-    ]
-    
-    result = db_collections["vaccines"].insert_many(vaccines_data)
-    return result.inserted_ids
-
-
-@pytest.fixture
-def populated_ectoparasites(db_collections):
-    """Popula a collection de ectoparasitas com dados de teste."""
-    ectoparasites_data = [
-        {
-            "nome_praga": "Pulga",
-            "tipo_praga": "Inseto",
-            "especies_alvo": ["Cão", "Gato"],
-            "transmissor_de_doencas": ["Dermatite alérgica"],
-            "sintomas_no_animal": ["Coceira", "Irritação da pele"],
-            "medicamentos_de_combate": [
-                {
-                    "descricao": "Fipronil",
-                    "principios_ativos": ["Fipronil"],
-                }
-            ],
-            "observacoes_adicionais": "Tratamento mensal recomendado",
-        }
-    ]
-    
-    result = db_collections["ectoparasites"].insert_many(ectoparasites_data)
-    return result.inserted_ids
-
-
-@pytest.fixture
-def populated_vermifugos(db_collections):
-    """Popula a collection de vermífugos com dados de teste."""
-    vermifugos_data = {
-        "parasitas_e_tratamentos": [
-            {
-                "nome_praga": "Áscaris",
-                "tipo_praga": "Nematódeo",
-                "especies_alvo": ["Cão", "Gato"],
-                "sintomas_no_animal": ["Vômito", "Diarreia"],
-                "medicamentos_de_combate": [
-                    {
-                        "descricao": "Pamoato de Pirantel",
-                        "principios_ativos": ["Pamoato de Pirantel"],
-                    }
-                ],
-                "observacoes_adicionais": "Repetir a cada 3 meses",
-            }
-        ]
-    }
-    
-    result = db_collections["vermifugos"].insert_one(vermifugos_data)
-    return result.inserted_id
 
 
 # Configurações do pytest

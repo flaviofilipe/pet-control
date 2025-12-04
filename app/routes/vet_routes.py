@@ -1,8 +1,14 @@
+"""
+Rotas para veterinários
+"""
+
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
 from starlette.responses import JSONResponse
 from datetime import datetime
-from ..services import PetService
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import PetService
+from app.database.connection import get_db
 from .auth_routes import get_current_user_from_session
 
 # Configuração do Jinja2
@@ -12,16 +18,18 @@ router = APIRouter()
 
 
 @router.get("/vet-dashboard", name="vet_dashboard")
-def get_vet_dashboard_page(
-    request: Request, user: dict = Depends(get_current_user_from_session)
+async def get_vet_dashboard_page(
+    request: Request,
+    user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Renderiza o dashboard específico para veterinários.
     """
     try:
         is_authenticated = "access_token" in request.session
-        pet_service = PetService()
-        pets_list = pet_service.get_user_pets(user["id"])
+        pet_service = PetService(db)
+        pets_list = await pet_service.get_user_pets(user["id"])
 
         return templates.TemplateResponse(
             "vet_dashboard.html",
@@ -33,22 +41,23 @@ def get_vet_dashboard_page(
                 "pets": pets_list,
             },
         )
-    except HTTPException as e:
+    except HTTPException:
         raise
 
 
 @router.get("/api/search-pet-by-nickname")
-def search_pet_by_nickname(
+async def search_pet_by_nickname(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     nickname: str = Query(...),
 ):
     """
     Busca um pet pelo nickname para veterinários visualizarem informações básicas.
     """
     try:
-        pet_service = PetService()
-        success, pet_data, message = pet_service.search_pet_by_nickname(nickname, user["id"])
+        pet_service = PetService(db)
+        success, pet_data, message = await pet_service.search_pet_by_nickname(nickname, user["id"])
 
         if not success:
             return JSONResponse(
@@ -67,9 +76,10 @@ def search_pet_by_nickname(
 
 
 @router.get("/api/search-pet-by-id")
-def search_pet_by_id(
+async def search_pet_by_id(
     request: Request,
     user: dict = Depends(get_current_user_from_session),
+    db: AsyncSession = Depends(get_db),
     pet_id: str = Query(...),
 ):
     """
@@ -77,8 +87,8 @@ def search_pet_by_id(
     (Mantido para compatibilidade)
     """
     try:
-        pet_service = PetService()
-        pet = pet_service.get_pet_details(pet_id, user["id"])
+        pet_service = PetService(db)
+        pet = await pet_service.get_pet_details(pet_id, user["id"])
 
         if not pet:
             return JSONResponse(

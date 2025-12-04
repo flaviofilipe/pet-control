@@ -100,6 +100,8 @@ RUN if [ "$ENV" = "production" ]; then \
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PATH="/app/.venv/bin:$PATH"
+ENV VIRTUAL_ENV=/app/.venv
 
 # Conditional environment variables
 RUN if [ "$ENV" = "production" ]; then \

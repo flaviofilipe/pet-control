@@ -1,10 +1,15 @@
+"""
+Aplicação FastAPI - Pet Control System
+"""
+
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
-from .config import SESSION_SECRET_KEY, ENVIRONMENT, IS_PRODUCTION, IS_DEVELOPMENT, IS_TESTING, FRONTEND_URL
+from .config import SESSION_SECRET_KEY, IS_PRODUCTION, FRONTEND_URL
 from .services import FileService
 from .routes import (
     auth_router,
@@ -16,14 +21,37 @@ from .routes import (
     vet_router,
 )
 
-# FastAPI application setup
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="Profile Management API",
-        description="API for user profile management with Auth0 and MongoDB.",
-        version="1.0.0",
-    )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Gerencia o ciclo de vida da aplicação.
+    Inicializa e fecha conexões do banco de dados.
+    """
+    # Startup
+    from .database.connection import init_db, close_db
+    
+    # Inicializa o banco de dados (cria tabelas se necessário)
+    await init_db()
+    
+    # Limpeza de arquivos temporários na inicialização
+    FileService.cleanup_temp_images()
+    
+    yield
+    
+    # Shutdown
+    await close_db()
+
+
+def create_app() -> FastAPI:
+    """Cria e configura a aplicação FastAPI"""
+    
+    app = FastAPI(
+        title="Pet Control API",
+        description="API para gerenciamento de pets com Auth0 e PostgreSQL.",
+        version="2.0.0",
+        lifespan=lifespan,
+    )
 
     # Configuração de middlewares
     setup_middlewares(app)
@@ -36,9 +64,6 @@ def create_app() -> FastAPI:
     
     # Configuração de handlers de exceção
     setup_exception_handlers(app)
-    
-    # Limpeza de arquivos temporários na inicialização
-    FileService.cleanup_temp_images()
     
     return app
 
@@ -56,13 +81,11 @@ def setup_middlewares(app: FastAPI):
     )
 
     # Session middleware para gerenciar estado do usuário logado
-    # Configuração segura para prevenir compartilhamento de sessões
-    # https_only é automaticamente habilitado em produção
     app.add_middleware(
         SessionMiddleware,
         secret_key=SESSION_SECRET_KEY,
         session_cookie="pet_control_session",  # Nome único do cookie
-        max_age=86400,  # 24 horas (em segundos) - sessão expira após 24h
+        max_age=86400,  # 24 horas (em segundos)
         same_site="lax",  # Proteção contra CSRF
         https_only=IS_PRODUCTION,  # True em produção, False em development/testing
     )
@@ -83,20 +106,23 @@ def setup_routes(app: FastAPI):
     async def health_check():
         """Endpoint de health check para monitoramento e Docker"""
         try:
-            from .database import database
             from datetime import datetime
+            from sqlalchemy import text
+            from .database.connection import AsyncSessionLocal
             
             # Testa conexão com banco de dados
-            database.client.admin.command("ismaster")
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
             
             return {
                 "status": "healthy",
                 "service": "pet-control-api",
                 "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0",
+                "version": "2.0.0",
                 "database": "connected"
             }
         except Exception as e:
+            from datetime import datetime
             raise HTTPException(
                 status_code=503, 
                 detail={
@@ -147,3 +173,7 @@ def setup_exception_handlers(app: FastAPI):
 
         # Para outras exceções HTTP, retorna a resposta padrão
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+# Cria a instância da aplicação para uso com uvicorn
+app = create_app()
